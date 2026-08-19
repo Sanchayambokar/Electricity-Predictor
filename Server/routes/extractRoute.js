@@ -53,16 +53,15 @@ async function extractBillWithAI(fileBuffer, mimeType, filename) {
     return null;
   }
 
-  try {
-    let normalizedMimeType = mimeType || "application/pdf";
-    if (normalizedMimeType === "image/jpg") normalizedMimeType = "image/jpeg";
-    if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(normalizedMimeType)) {
-      if (filename.toLowerCase().endsWith(".pdf")) normalizedMimeType = "application/pdf";
-      else if (filename.toLowerCase().endsWith(".png")) normalizedMimeType = "image/png";
-      else normalizedMimeType = "image/jpeg";
-    }
+  let normalizedMimeType = mimeType || "application/pdf";
+  if (normalizedMimeType === "image/jpg") normalizedMimeType = "image/jpeg";
+  if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(normalizedMimeType)) {
+    if (filename.toLowerCase().endsWith(".pdf")) normalizedMimeType = "application/pdf";
+    else if (filename.toLowerCase().endsWith(".png")) normalizedMimeType = "image/png";
+    else normalizedMimeType = "image/jpeg";
+  }
 
-    const prompt = `You are a high-accuracy document OCR and structured extraction engine specialized in electricity and utility bills (e.g. MSEDCL / Mahavitaran, Tata Power, Adani Electricity Mumbai, Torrent Power, BEST, WBSEDCL, BESCOM, UPPCL, TANGEDCO, etc.).
+  const prompt = `You are a high-accuracy document OCR and structured extraction engine specialized in electricity and utility bills (e.g. MSEDCL / Mahavitaran, Tata Power, Adani Electricity Mumbai, Torrent Power, BEST, WBSEDCL, BESCOM, UPPCL, TANGEDCO, etc.).
 
 Analyze this electricity bill document with extreme precision and extract all data into a clean JSON object matching this schema:
 
@@ -121,33 +120,41 @@ Extraction Guidelines:
 3. If specific summary charges (fixed, wheeling, fac, duty) are split on the bill, extract each accurately; if combined, populate available amounts.
 4. Clean all strings, format currency with ₹ where appropriate, and ensure valid JSON output with no markdown fences.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
-      contents: [
-        {
-          inlineData: {
-            mimeType: normalizedMimeType,
-            data: fileBuffer.toString("base64"),
-          },
-        },
-        { text: prompt },
-      ],
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
+  // Candidate models in order of priority (using stable high-availability flash models first)
+  const candidateModels = ["gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-3.7-flash"];
 
-    const text = response.text;
-    if (text) {
-      const parsed = JSON.parse(text.trim());
-      if (parsed && (parsed.usage || parsed.consumer || parsed.company)) {
-        console.log("Successfully extracted bill data using Gemini Multimodal OCR:", parsed.company?.name, parsed.consumer?.name);
-        return parsed;
+  for (const model of candidateModels) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: [
+          {
+            inlineData: {
+              mimeType: normalizedMimeType,
+              data: fileBuffer.toString("base64"),
+            },
+          },
+          { text: prompt },
+        ],
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      const text = response.text;
+      if (text) {
+        const parsed = JSON.parse(text.trim());
+        if (parsed && (parsed.usage || parsed.consumer || parsed.company)) {
+          console.log(`✅ Extracted bill data using model (${model}):`, parsed.company?.name, parsed.consumer?.name);
+          return parsed;
+        }
       }
+    } catch (err) {
+      // Gracefully advance to next candidate model on transient errors
+      continue;
     }
-  } catch (err) {
-    console.error("Gemini AI extraction warning:", err.message);
   }
+
   return null;
 }
 

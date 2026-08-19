@@ -35,7 +35,17 @@ async function startServer() {
   app.use("/api/history", historyRoute);
 
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", service: "Electricity Bill Predictor API" });
+    res.json({
+      status: "ok",
+      service: "Electricity Bill Predictor API",
+      timestamp: new Date().toISOString(),
+      keys: {
+        geminiApiKey: Boolean(process.env.GEMINI_API_KEY),
+        mongoDb: Boolean(process.env.MONGO_URI || process.env.MONGODB_URI),
+        jwtSecret: Boolean(process.env.JWT_SECRET),
+        smtpConfigured: Boolean(process.env.SMTP_USER && process.env.SMTP_PASS),
+      },
+    });
   });
 
   // Vite middleware in dev / Static files in production
