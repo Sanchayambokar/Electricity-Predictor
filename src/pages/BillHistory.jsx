@@ -132,6 +132,7 @@ export default function BillHistory() {
     function handleLogout() {
         localStorage.removeItem("user");
         localStorage.removeItem("token");
+        localStorage.removeItem("fallbackHistory");
         navigate("/login");
     }
 

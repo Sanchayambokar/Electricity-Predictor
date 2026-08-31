@@ -1,6 +1,6 @@
 import "../styles/home.css";
 import "../styles/profile.css";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Menu, ChevronDown, User, Mail, Phone, MapPin, Zap, Hash, Shield, Edit2, Save } from "lucide-react";
 import Sidebar_Menu from "./Sidebar_Menu";
 import { useNavigate } from "react-router-dom";
@@ -12,20 +12,119 @@ export default function Profile() {
     const navigate = useNavigate();
     const user = JSON.parse(localStorage.getItem("user"));
 
-    const [form, setForm] = useState({
-        phone: "+91 98765 43210",
+    // Static defaults — shown the very first time, before any edits
+    const DEFAULTS = {
+        phone: "+91 ",
         address: "Mumbai, Maharashtra",
         provider: "MSEDCL",
         meterNumber: "MH-2045-87632",
         plan: "Residential LT-1",
         connectionType: "Single Phase",
-    });
+    };
+
+    // Load previously saved profile data from localStorage; fall back to defaults
+    const getSavedData = () => {
+        try {
+            const saved = localStorage.getItem("profileData");
+            return saved ? { ...DEFAULTS, ...JSON.parse(saved) } : { ...DEFAULTS };
+        } catch {
+            return { ...DEFAULTS };
+        }
+    };
+
+    const [form, setForm] = useState(getSavedData);
+    // Draft holds in-progress edits; only committed on Save
+    const [draft, setDraft] = useState({ ...form });
+
+    const [stats, setStats] = useState({ predictions: 0, memberSince: new Date().getFullYear(), avgBill: "₹0" });
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const token = localStorage.getItem("token");
+                const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+                const [predRes, billsRes] = await Promise.all([
+                    fetch("/api/history/predictions", { headers }),
+                    fetch("/api/history/bills", { headers })
+                ]);
+
+                let predictionsData = [];
+                if (predRes.ok) predictionsData = await predRes.json();
+
+                let billsData = [];
+                if (billsRes.ok) billsData = await billsRes.json();
+
+                const numPredictions = predictionsData.length;
+
+                let totalAmount = 0;
+                let count = 0;
+
+                if (billsData.length > 0) {
+                    billsData.forEach(b => {
+                        totalAmount += Number(b.amount) || 0;
+                        count++;
+                    });
+                } else if (predictionsData.length > 0) {
+                    predictionsData.forEach(p => {
+                        totalAmount += Number(p.predictAmount) || 0;
+                        count++;
+                    });
+                }
+
+                let avg = count > 0 ? (totalAmount / count) : 0;
+
+                let formattedAvg = "₹0";
+                if (avg >= 1000) {
+                    formattedAvg = "₹" + (avg / 1000).toFixed(1) + "K";
+                } else if (avg > 0) {
+                    formattedAvg = "₹" + Math.round(avg);
+                }
+
+                let memberSince = new Date().getFullYear();
+                let dates = [];
+
+                predictionsData.forEach(p => {
+                    if (p.createdAt) dates.push(new Date(p.createdAt).getFullYear());
+                });
+
+                billsData.forEach(b => {
+                    if (b.createdAt) dates.push(new Date(b.createdAt).getFullYear());
+                });
+
+                if (dates.length > 0) {
+                    memberSince = Math.min(...dates);
+                }
+
+                setStats({
+                    predictions: numPredictions,
+                    memberSince,
+                    avgBill: formattedAvg
+                });
+            } catch (err) {
+                console.error("Error fetching stats:", err);
+            }
+        };
+        fetchStats();
+    }, []);
+
+    function handleEdit() {
+        setDraft({ ...form }); // reset draft to current saved state
+        setEditMode(true);
+    }
 
     function handleChange(e) {
-        setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+        setDraft(prev => ({ ...prev, [e.target.name]: e.target.value }));
     }
 
     function handleSave() {
+        setForm({ ...draft });
+        localStorage.setItem("profileData", JSON.stringify(draft));
+        setEditMode(false);
+    }
+
+    function handleCancel() {
+        setDraft({ ...form }); // discard changes
         setEditMode(false);
     }
 
@@ -73,17 +172,17 @@ export default function Profile() {
                                 <span className="pf-role-badge">Residential User</span>
                                 <div className="pf-stats-row">
                                     <div className="pf-stat">
-                                        <p className="pf-stat-val">12</p>
+                                        <p className="pf-stat-val">{stats.predictions}</p>
                                         <p className="pf-stat-lbl">Predictions</p>
                                     </div>
                                     <div className="pf-stat-divider" />
                                     <div className="pf-stat">
-                                        <p className="pf-stat-val">2026</p>
+                                        <p className="pf-stat-val">{stats.memberSince}</p>
                                         <p className="pf-stat-lbl">Member Since</p>
                                     </div>
                                     <div className="pf-stat-divider" />
                                     <div className="pf-stat">
-                                        <p className="pf-stat-val">₹4.2K</p>
+                                        <p className="pf-stat-val">{stats.avgBill}</p>
                                         <p className="pf-stat-lbl">Avg Bill</p>
                                     </div>
                                 </div>
@@ -97,11 +196,18 @@ export default function Profile() {
                                         <User size={18} color="#6D4AFF" />
                                         <h4>Personal Information</h4>
                                     </div>
-                                    <button
-                                        className={`pf-edit-btn ${editMode ? "save" : ""}`}
-                                        onClick={() => editMode ? handleSave() : setEditMode(true)}>
-                                        {editMode ? <><Save size={15} /> Save</> : <><Edit2 size={15} /> Edit</>}
-                                    </button>
+                                    <div style={{ display: "flex", gap: "8px" }}>
+                                        {editMode && (
+                                            <button className="pf-edit-btn" onClick={handleCancel} style={{ background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db" }}>
+                                                Cancel
+                                            </button>
+                                        )}
+                                        <button
+                                            className={`pf-edit-btn ${editMode ? "save" : ""}`}
+                                            onClick={() => editMode ? handleSave() : handleEdit()}>
+                                            {editMode ? <><Save size={15} /> Save</> : <><Edit2 size={15} /> Edit</>}
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="pf-fields">
@@ -117,8 +223,12 @@ export default function Profile() {
                                         <label><Phone size={14} /> Phone Number</label>
                                         <input
                                             name="phone"
-                                            value={form.phone}
-                                            onChange={handleChange}
+                                            maxLength="10"
+                                            value={editMode ? draft.phone : form.phone}
+                                            onChange={(e) => {
+                                                e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                                                handleChange(e);
+                                            }}
                                             disabled={!editMode}
                                             className={`pf-input ${!editMode ? "disabled" : ""}`} />
                                     </div>
@@ -126,7 +236,7 @@ export default function Profile() {
                                         <label><MapPin size={14} /> Address</label>
                                         <input
                                             name="address"
-                                            value={form.address}
+                                            value={editMode ? draft.address : form.address}
                                             onChange={handleChange}
                                             disabled={!editMode}
                                             className={`pf-input ${!editMode ? "disabled" : ""}`} />
@@ -151,7 +261,7 @@ export default function Profile() {
                                         <label><Zap size={14} /> Provider</label>
                                         <input
                                             name="provider"
-                                            value={form.provider}
+                                            value={editMode ? draft.provider : form.provider}
                                             onChange={handleChange}
                                             disabled={!editMode}
                                             className={`pf-input ${!editMode ? "disabled" : ""}`} />
@@ -160,7 +270,7 @@ export default function Profile() {
                                         <label><Hash size={14} /> Meter Number</label>
                                         <input
                                             name="meterNumber"
-                                            value={form.meterNumber}
+                                            value={editMode ? draft.meterNumber : form.meterNumber}
                                             onChange={handleChange}
                                             disabled={!editMode}
                                             className={`pf-input ${!editMode ? "disabled" : ""}`} />
@@ -169,7 +279,7 @@ export default function Profile() {
                                         <label><Shield size={14} /> Tariff Plan</label>
                                         <input
                                             name="plan"
-                                            value={form.plan}
+                                            value={editMode ? draft.plan : form.plan}
                                             onChange={handleChange}
                                             disabled={!editMode}
                                             className={`pf-input ${!editMode ? "disabled" : ""}`} />
@@ -178,7 +288,7 @@ export default function Profile() {
                                         <label><Zap size={14} /> Connection Type</label>
                                         <input
                                             name="connectionType"
-                                            value={form.connectionType}
+                                            value={editMode ? draft.connectionType : form.connectionType}
                                             onChange={handleChange}
                                             disabled={!editMode}
                                             className={`pf-input ${!editMode ? "disabled" : ""}`} />

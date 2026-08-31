@@ -161,6 +161,7 @@ export default function ConsumptionHistory() {
     function handleLogout() {
         localStorage.removeItem("user");
         localStorage.removeItem("token");
+        localStorage.removeItem("fallbackHistory");
         navigate("/login");
     }
 

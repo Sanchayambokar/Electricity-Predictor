@@ -56,7 +56,7 @@
     text-align: center;
     cursor: pointer;
     transition: all 0.2s ease;
-    min-height: 260px;
+    min-height: 160px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.04);
 }
 
@@ -75,6 +75,7 @@
     cursor: not-allowed;
     border-color: #c4b5fd;
     background: #fafaff;
+    padding: 20px 32px;
 }
 
 .ub-dropzone.done {
@@ -224,65 +225,52 @@
     color: #16A34A;
 }
 
-/* ===== OTHER WAYS ===== */
-.ub-other-ways {
-    margin-top: 20px;
-    background: white;
-    border-radius: 16px;
-    padding: 20px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+/* ===== OTHER WAYS INLINE ===== */
+.ub-other-ways-inline {
+    margin-top: 24px;
+    width: 100%;
 }
 
-.ub-other-title {
-    font-size: 13px;
+.ub-other-title-inline {
+    font-size: 12px;
     font-weight: 600;
     color: #9ca3af;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
+    text-align: center;
 }
 
-.ub-other-list {
+.ub-other-list-inline {
     display: flex;
-    flex-direction: column;
     gap: 12px;
-}
-
-.ub-other-item {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 10px;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: background 0.15s;
-}
-
-.ub-other-item:hover {
-    background: #fafaff;
-}
-
-.ub-other-icon {
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    background: #f5f3ff;
-    display: flex;
-    align-items: center;
     justify-content: center;
-    flex-shrink: 0;
+    flex-wrap: wrap;
 }
 
-.ub-other-name {
-    font-size: 14px;
+.ub-other-item-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1px solid #e5e7eb;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.ub-other-item-inline:hover {
+    background: #fafaff;
+    border-color: #6D4AFF;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(109,74,255,0.08);
+}
+
+.ub-other-name-inline {
+    font-size: 13px;
     font-weight: 600;
     color: #374151;
-}
-
-.ub-other-desc {
-    font-size: 12px;
-    color: #9ca3af;
-    margin-top: 2px;
 }
 
 /* ===== RIGHT PANEL CARDS ===== */
@@ -360,7 +348,7 @@
 
 .ub-format-tag {
     background: #f5f3ff;
-    color: #6D4AFF;
+    color: #4c2ebf;
     font-size: 12px;
     font-weight: 700;
     padding: 4px 12px;
@@ -762,4 +750,227 @@
     .ub-usage-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* ===== MULTI-FILE PREVIEW ===== */
+.ub-preview-section {
+    margin-top: 16px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+}
+
+.ub-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.ub-preview-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin: 0;
+}
+
+.ub-add-more-btn {
+    background: #f5f3ff;
+    color: #6D4AFF;
+    border: 1px solid #d4c8ff;
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.ub-add-more-btn:hover {
+    background: #ede9fe;
+}
+
+.ub-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.ub-preview-card {
+    position: relative;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 8px;
+    background: #f9fafb;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+}
+.ub-preview-card:hover {
+    border-color: #a78bfa;
+    box-shadow: 0 2px 8px rgba(109,74,255,0.12);
+}
+.ub-preview-card.active {
+    border-color: #6D4AFF;
+    background: #f5f3ff;
+    box-shadow: 0 0 0 3px rgba(109,74,255,0.12);
+}
+
+.ub-preview-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #ef4444;
+    color: white;
+    border: none;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    transition: background 0.15s;
+}
+.ub-preview-remove:hover { background: #dc2626; }
+
+.ub-preview-img {
+    width: 100%;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 8px;
+    display: block;
+}
+
+.ub-preview-pdf-icon {
+    width: 100%;
+    height: 80px;
+    background: #ede9fe;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #6D4AFF;
+}
+
+.ub-preview-name {
+    font-size: 10px;
+    color: #374151;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    text-align: center;
+    margin: 0;
+}
+
+.ub-preview-size {
+    font-size: 9px;
+    color: #9ca3af;
+    margin: 0;
+}
+
+.ub-extract-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #6D4AFF, #8b5cf6);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 11px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: opacity 0.15s, transform 0.1s;
+    box-shadow: 0 2px 8px rgba(109,74,255,0.3);
+}
+.ub-extract-btn:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+}
+.ub-extract-btn:active {
+    transform: translateY(0);
+}
+
+/* ===== OCR IN-DROPZONE PREVIEW ===== */
+.ub-ocr-preview-wrap {
+    position: relative;
+    width: 80px;
+    height: 56px;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    box-shadow: 0 2px 8px rgba(109,74,255,0.18);
+    border: 2px solid #a78bfa;
+}
+
+.ub-ocr-preview-img {
+    width: 100%;
+    height: 100%;
+    max-width: 80px;
+    max-height: 56px;
+    object-fit: cover;
+    display: block;
+}
+
+.ub-ocr-preview-pdf {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #6D4AFF;
+}
+
+/* Animated scan line sweep */
+@keyframes ocr-scan {
+    0%   { top: 0%; opacity: 1; }
+    90%  { top: 100%; opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+}
+
+.ub-ocr-scan-line {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #6D4AFF, transparent);
+    box-shadow: 0 0 10px 2px rgba(109,74,255,0.6);
+    animation: ocr-scan 1.8s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.ub-ocr-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #4b5563;
+    margin-bottom: 4px;
 }

@@ -15,11 +15,6 @@ function getGenAI() {
   if (!aiClient && process.env.GEMINI_API_KEY) {
     aiClient = new GoogleGenAI({
       apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
     });
   }
   return aiClient;
@@ -46,20 +41,28 @@ const upload = multer({
   },
 });
 
-async function extractBillWithAI(fileBuffer, mimeType, filename) {
+async function extractBillWithAI(files) {
   const ai = getGenAI();
   if (!ai) {
     console.log("No GEMINI_API_KEY found, using standard template parsing.");
     return null;
   }
 
-  let normalizedMimeType = mimeType || "application/pdf";
-  if (normalizedMimeType === "image/jpg") normalizedMimeType = "image/jpeg";
-  if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(normalizedMimeType)) {
-    if (filename.toLowerCase().endsWith(".pdf")) normalizedMimeType = "application/pdf";
-    else if (filename.toLowerCase().endsWith(".png")) normalizedMimeType = "image/png";
-    else normalizedMimeType = "image/jpeg";
-  }
+  const contentsParts = files.map(file => {
+    let normalizedMimeType = file.mimetype || "application/pdf";
+    if (normalizedMimeType === "image/jpg") normalizedMimeType = "image/jpeg";
+    if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(normalizedMimeType)) {
+      if (file.originalname.toLowerCase().endsWith(".pdf")) normalizedMimeType = "application/pdf";
+      else if (file.originalname.toLowerCase().endsWith(".png")) normalizedMimeType = "image/png";
+      else normalizedMimeType = "image/jpeg";
+    }
+    return {
+      inlineData: {
+        mimeType: normalizedMimeType,
+        data: file.buffer.toString("base64"),
+      },
+    };
+  });
 
   const prompt = `You are a high-accuracy document OCR and structured extraction engine specialized in electricity and utility bills (e.g. MSEDCL / Mahavitaran, Tata Power, Adani Electricity Mumbai, Torrent Power, BEST, WBSEDCL, BESCOM, UPPCL, TANGEDCO, etc.).
 
@@ -121,19 +124,15 @@ Extraction Guidelines:
 4. Clean all strings, format currency with ₹ where appropriate, and ensure valid JSON output with no markdown fences.`;
 
   // Candidate models in order of priority (using stable high-availability flash models first)
-  const candidateModels = ["gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-3.7-flash"];
+  const candidateModels = ["gemini-3.6-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
 
   for (const model of candidateModels) {
     try {
+      console.log(`🔄 Attempting OCR extraction with model: ${model}`);
       const response = await ai.models.generateContent({
         model,
         contents: [
-          {
-            inlineData: {
-              mimeType: normalizedMimeType,
-              data: fileBuffer.toString("base64"),
-            },
-          },
+          ...contentsParts,
           { text: prompt },
         ],
         config: {
@@ -150,6 +149,7 @@ Extraction Guidelines:
         }
       }
     } catch (err) {
+      console.warn(`⚠️ Model ${model} failed: ${err.message}. Trying next model...`);
       // Gracefully advance to next candidate model on transient errors
       continue;
     }
@@ -442,20 +442,21 @@ function generateRealisticBillData(filename, buffer) {
   return defaultTemplates[provider] || defaultTemplates.msedcl;
 }
 
-router.post("/extract", auth, upload.single("file"), async (req, res) => {
+router.post("/extract", auth, upload.any(), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
+    const filesToProcess = req.files || (req.file ? [req.file] : []);
+    if (!filesToProcess || filesToProcess.length === 0) {
+      return res.status(400).json({ error: "No files uploaded" });
     }
 
-    console.log(`Extract request received for: ${req.file.originalname} (${req.file.mimetype}, size: ${req.file.size} bytes)`);
+    console.log(`Extract request received for ${filesToProcess.length} files.`);
 
     // 1. Attempt AI Vision OCR
-    let parsedBill = await extractBillWithAI(req.file.buffer, req.file.mimetype, req.file.originalname);
+    let parsedBill = await extractBillWithAI(filesToProcess);
 
     // 2. Fallback if AI unavailable or parsing returned null
     if (!parsedBill) {
-      parsedBill = generateRealisticBillData(req.file.originalname, req.file.buffer);
+      parsedBill = generateRealisticBillData(filesToProcess[0].originalname, filesToProcess[0].buffer);
     }
 
     if (!parsedBill.summary) parsedBill.summary = {};

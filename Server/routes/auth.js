@@ -3,6 +3,8 @@ const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
+const fs = require("fs");
+const path = require("path");
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "ElectricityAnalyser";
@@ -88,7 +90,8 @@ async function sendResetEmail(toEmail, otp) {
 
 
 // In-memory fallback user store when MongoDB is unavailable
-const memoryUsers = [
+const fallbackFilePath = path.join(process.cwd(), "fallback_users.json");
+let memoryUsers = [
   {
     _id: "mem_demo_user",
     fname: "Test",
@@ -98,6 +101,27 @@ const memoryUsers = [
     password: "$2a$10$7r6N3l8F4w.6pM3.i66vce8bNfG3a0nQ2fG0wzX/k57aN73vE9212",
   },
 ];
+
+// Try to load persisted fallback users
+try {
+  if (fs.existsSync(fallbackFilePath)) {
+    const data = fs.readFileSync(fallbackFilePath, "utf8");
+    const parsed = JSON.parse(data);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      memoryUsers = parsed;
+    }
+  }
+} catch (e) {
+  console.warn("Failed to load fallback_users.json", e.message);
+}
+
+const saveMemoryUsers = () => {
+  try {
+    fs.writeFileSync(fallbackFilePath, JSON.stringify(memoryUsers, null, 2), "utf8");
+  } catch (e) {
+    console.warn("Failed to save fallback_users.json", e.message);
+  }
+};
 
 
 router.post("/register", async (req, res) => {
@@ -133,8 +157,9 @@ router.post("/register", async (req, res) => {
         password: hashedPassword
       };
       memoryUsers.push(memUser);
+      saveMemoryUsers(); // Persist to file
       const token = jwt.sign({ id: memUser._id, email: memUser.email }, JWT_SECRET, { expiresIn: "30d" });
-      console.log(`New user registered (In-Memory): ${email}`);
+      console.log(`New user registered (In-Memory Fallback): ${email}`);
       return res.json({ message: "Registration successful!", token });
     }
 
@@ -164,6 +189,7 @@ router.post("/login", async (req, res) => {
             token,
             user: {
                 name: user.fname + " " + user.lname,
+                email: user.email,
                 initials: user.fname.charAt(0).toUpperCase() + user.lname.charAt(0).toUpperCase()
             }
         });
@@ -190,6 +216,7 @@ router.post("/login", async (req, res) => {
         token,
         user: {
             name: memUser.fname + " " + memUser.lname,
+            email: memUser.email,
             initials: memUser.fname.charAt(0).toUpperCase() + memUser.lname.charAt(0).toUpperCase()
         }
     });
@@ -234,6 +261,7 @@ router.post("/forgot-password", async (req, res) => {
     if (memUser) {
       memUser.resetToken = otp;
       memUser.resetTokenExpiry = expiry;
+      saveMemoryUsers();
       userFound = true;
       console.log(`Password reset OTP generated for (In-Memory): ${cleanEmail} -> ${otp}`);
     }
@@ -368,6 +396,7 @@ router.post("/reset-password", async (req, res) => {
       memUser.password = hashedPassword;
       memUser.resetToken = null;
       memUser.resetTokenExpiry = null;
+      saveMemoryUsers();
       updated = true;
       console.log(`Password reset completed (In-Memory) for: ${cleanEmail}`);
     }

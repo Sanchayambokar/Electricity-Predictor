@@ -1,12 +1,13 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const path = require("path");
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/auth");
 const predictRoute = require("./routes/predictRoute");
 const extractRoute = require("./routes/extractRoute");
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 connectDB();
 
@@ -27,7 +28,7 @@ app.get("/", (req, res) => {
   console.log("Server is run on / port")
 });
 
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on ${PORT}`);

@@ -34,10 +34,10 @@ const UserSchema = new mongoose.Schema({
 
 
 UserSchema.virtual('initials').get(function() {
-  if (!this.name) return '';
-  const parts = this.name.split(' ');
-  const initials = parts.map(part => part.charAt(0).toUpperCase()).join('');
-  return initials.slice(0, 2); 
+  if (!this.fname) return '';
+  const first = this.fname.charAt(0).toUpperCase();
+  const last = this.lname ? this.lname.charAt(0).toUpperCase() : '';
+  return first + last;
 });
 
 module.exports = mongoose.model("User", UserSchema);

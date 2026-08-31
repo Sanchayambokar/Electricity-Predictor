@@ -1,0 +1,37 @@
+[
+  {
+    "_id": "mem_demo_user",
+    "fname": "Test",
+    "lname": "User",
+    "email": "test@example.com",
+    "password": "$2a$10$7r6N3l8F4w.6pM3.i66vce8bNfG3a0nQ2fG0wzX/k57aN73vE9212"
+  },
+  {
+    "_id": "mem_1788100772723",
+    "fname": "Test",
+    "lname": "User",
+    "email": "testauth@gmail.com",
+    "password": "$2b$10$pIksH5MItITHjKVqD4Q6I.rlNLcklEP5v6ScpIZ2B2ZdPh5j.W4nC"
+  },
+  {
+    "_id": "mem_1788190472076",
+    "fname": "OCR",
+    "lname": "Tester",
+    "email": "ocrtest_1788190472003@example.com",
+    "password": "$2b$10$A/l6eqKWOr0flTFXjEHpw.WPE6mhliCtmpm5nWlwi0MSh5vK9ELF6"
+  },
+  {
+    "_id": "mem_1788190480482",
+    "fname": "Image",
+    "lname": "Tester",
+    "email": "imgtest_1788190480402@example.com",
+    "password": "$2b$10$cgd7l4TEMeZqWDfiJsOPZuoxU92lGKzimdcuTSRwykzMESF4tmIKO"
+  },
+  {
+    "_id": "mem_1788190760386",
+    "fname": "Sanchay",
+    "lname": "Ambokar",
+    "email": "ambokarsanchay4@gmail.com",
+    "password": "$2b$10$nziYjR6CmWxU/refhCfb/ur2Lzldqej//I0LMittu50rHNlXgZmqK"
+  }
+]

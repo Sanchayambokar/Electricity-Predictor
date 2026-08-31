@@ -10,7 +10,7 @@ module.exports = (req, res, next) => {
 
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded; // Contains id and email
+    req.user = decoded;
     next();
   } catch (error) {
     console.error("Auth middleware error:", error.message);
