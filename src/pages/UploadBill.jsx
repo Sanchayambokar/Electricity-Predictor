@@ -44,6 +44,10 @@ export default function UploadBill() {
     const [processing, setProcessing] = useState(false);
     const [extracted, setExtracted] = useState(null);
     const [error, setError] = useState(null);
+    // manualMode: true when user explicitly skips OCR or when OCR validation fails
+    const [manualMode, setManualMode] = useState(false);
+    // validationWarnings: populated when server returns 422 + requiresManualOverride
+    const [validationWarnings, setValidationWarnings] = useState([]);
     const fileRef = useRef();
     const cameraRef = useRef();
     const navigate = useNavigate();
@@ -96,6 +100,7 @@ export default function UploadBill() {
         setProcessing(true);
         setExtracted(null);
         setError(null);
+        setValidationWarnings([]);
 
         try {
             const formData = new FormData();
@@ -107,6 +112,19 @@ export default function UploadBill() {
 
             const res = await fetch("/api/extract", { method: "POST", body: formData, headers });
             const data = await res.json();
+
+            // Handle 422 validation errors gracefully: show warnings and let user review/override
+            if (res.status === 422 && data.requiresManualOverride) {
+                setValidationWarnings(data.validationErrors || []);
+                // Still show the parsed bill so user can review + manually correct fields
+                if (data.parsedBill) {
+                    setExtracted({ ...data.parsedBill, _confidence: data._confidence });
+                    setActiveTab("details");
+                }
+                setProcessing(false);
+                return;
+            }
+
             if (!res.ok) throw new Error(data.detail || data.error || data.message || "Extraction failed");
 
             setExtracted(data);
@@ -120,6 +138,28 @@ export default function UploadBill() {
             setError(msg);
             setProcessing(false);
         }
+    }
+
+    /** Returns a confidence badge element for a field based on _confidence metadata. */
+    function getConfidenceBadge(fieldName) {
+        const conf = extracted?._confidence?.[fieldName];
+        if (!conf) return null;
+        if (conf.confidence > 80) {
+            return <span className="ub-conf-badge ub-conf-high" title="High confidence OCR extraction">From OCR ✓</span>;
+        } else if (conf.confidence > 0) {
+            return <span className="ub-conf-badge ub-conf-review" title="Needs review — moderate confidence">Needs Review ⚠</span>;
+        } else {
+            return <span className="ub-conf-badge ub-conf-manual" title="Could not be extracted — please enter manually">Manual Required ✎</span>;
+        }
+    }
+
+    /** Returns the CSS class to apply to a field row based on confidence. */
+    function getFieldClass(fieldName) {
+        const conf = extracted?._confidence?.[fieldName];
+        if (!conf) return "";
+        if (conf.confidence > 80) return "ub-field-ocr-high";
+        if (conf.confidence > 0)  return "ub-field-ocr-review";
+        return "ub-field-manual";
     }
 
     function handleDrop(e) {
@@ -205,6 +245,32 @@ export default function UploadBill() {
                 <main className="content">
                     <h2>Upload Your Bill &amp; View Details</h2>
                     <p className="ub-subtitle">Upload your electricity bill PDF or image to extract and view important details.</p>
+
+                    {/* ── Persistent Skip OCR / Enter Manually banner ── */}
+                    <div className="ub-manual-banner">
+                        <span className="ub-manual-banner-text">
+                            Prefer to enter details yourself?
+                        </span>
+                        <button
+                            className="ub-manual-toggle-btn"
+                            onClick={() => { setManualMode(m => !m); setActiveTab("upload"); }}
+                        >
+                            {manualMode ? "← Back to OCR Upload" : "Skip OCR / Enter Manually"}
+                        </button>
+                    </div>
+
+                    {/* ── Validation warnings from server ── */}
+                    {validationWarnings.length > 0 && (
+                        <div className="ub-validation-warn">
+                            <AlertCircle size={16} color="#b45309" style={{ flexShrink: 0 }} />
+                            <div>
+                                <strong>OCR Validation Warnings</strong> — please review and correct highlighted fields:
+                                <ul style={{ margin: "6px 0 0", paddingLeft: "18px" }}>
+                                    {validationWarnings.map((w, i) => <li key={i}>{w}</li>)}
+                                </ul>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="ub-tabs">
                         <button className={`ub-tab ${activeTab === "upload" ? "active" : ""}`} onClick={() => setActiveTab("upload")}>

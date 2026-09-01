@@ -5,7 +5,12 @@ const CompanyProfile = require("../models/CompanyProfile");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 
-const JWT_SECRET = process.env.JWT_SECRET || "ElectricityAnalyser";
+// JWT_SECRET must be set via environment variable. No hardcoded fallback
+// to avoid credential leaks — startup will fail fast if the env var is missing.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET environment variable is not set. Server will not start securely.");
+}
 
 // In-memory store fallback
 const memoryPredictions = [];
@@ -203,7 +208,16 @@ router.post("/predict", authOptional, async (req, res) => {
       }
     }
 
-    // Calculate Amount
+    // ── Deterministic Amount Calculation ────────────────────────────────────────
+    // IMPORTANT: Amount is NEVER predicted by a machine-learning model.
+    // Predicting amount separately would just be re-learning the tariff slab formula
+    // that is already implemented deterministically in calculateDefaultTariff().
+    // The correct pipeline is always:
+    //   1. Predict UNITS (ML model or formula based on appliances/history)
+    //   2. Compute AMOUNT = calculateDefaultTariff(provider, predictedUnits)
+    //      — or use the provider-specific slab math if tariff details are supplied.
+    // This ensures amount stays consistent with provider tariff rules at all times.
+    // ──────────────────────────────────────────────────────────────────────────────
     const fixed = parseTariffValue(data.fixedCharge);
     const rate = parseTariffValue(data.energyRate);
     let facRate = parseTariffValue(data.fac);

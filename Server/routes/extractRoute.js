@@ -31,6 +31,87 @@ function getCompanyKey(name) {
   return "msedcl";
 }
 
+// ── Tariff slab tables (mirrors the Flask/predictRoute logic) ─────────────────────────
+const tariffs = {
+  tata:    [{ limit: 100, fixed: 90,  energy: 4.43,  fac: 0.0,  wheeling: 2.76, duty: 16 }, { limit: 300, fixed: 135, energy: 9.64,  fac: 0.0,  wheeling: 2.76, duty: 16 }, { limit: 500, fixed: 135, energy: 12.83, fac: 0.0,  wheeling: 2.76, duty: 16 }, { limit: Infinity, fixed: 160, energy: 14.33, fac: 0.0,  wheeling: 2.76, duty: 16 }],
+  msedcl:  [{ limit: 100, fixed: 130, energy: 3.96,  fac: 0.15, wheeling: 1.60, duty: 16 }, { limit: 300, fixed: 130, energy: 10.80, fac: 0.25, wheeling: 1.60, duty: 16 }, { limit: 500, fixed: 130, energy: 15.03, fac: 0.35, wheeling: 1.60, duty: 16 }, { limit: Infinity, fixed: 130, energy: 17.53, fac: 0.40, wheeling: 1.60, duty: 16 }],
+  adani:   [{ limit: 100, fixed: 90,  energy: 2.65,  fac: 0.65, wheeling: 2.28, duty: 16 }, { limit: 300, fixed: 135, energy: 5.85,  fac: 0.65, wheeling: 2.28, duty: 16 }, { limit: 500, fixed: 135, energy: 7.10,  fac: 0.65, wheeling: 2.28, duty: 16 }, { limit: Infinity, fixed: 160, energy: 8.35,  fac: 0.65, wheeling: 2.28, duty: 16 }],
+  torrent: [{ limit: 100, fixed: 130, energy: 4.28,  fac: 0.10, wheeling: 1.47, duty: 16 }, { limit: 300, fixed: 130, energy: 11.10, fac: 0.15, wheeling: 1.47, duty: 16 }, { limit: 500, fixed: 130, energy: 15.38, fac: 0.20, wheeling: 1.47, duty: 16 }, { limit: Infinity, fixed: 130, energy: 17.68, fac: 0.20, wheeling: 1.47, duty: 16 }],
+  best:    [{ limit: 100, fixed: 90,  energy: 2.10,  fac: 0.75, wheeling: 1.87, duty: 16 }, { limit: 300, fixed: 135, energy: 5.50,  fac: 0.75, wheeling: 1.87, duty: 16 }, { limit: 500, fixed: 135, energy: 10.18, fac: 0.75, wheeling: 1.87, duty: 16 }, { limit: Infinity, fixed: 160, energy: 11.55, fac: 0.75, wheeling: 1.87, duty: 16 }],
+};
+
+/**
+ * Deterministic tariff calculation — same formula as predictRoute.js and Flask app.py.
+ * Used here for server-side OCR output validation before saving to DB.
+ */
+function calculateDefaultTariff(companyKey, units) {
+  if (!units || units <= 0) return 0;
+  const slabs = tariffs[String(companyKey).toLowerCase()] || tariffs.msedcl;
+  let fixedCharge = 0;
+  for (const s of slabs) { fixedCharge = s.fixed; if (units <= s.limit) break; }
+  let energyCharge = 0, remaining = units, prev = 0;
+  for (const s of slabs) {
+    const slabUnits = Math.min(remaining, s.limit - prev);
+    if (slabUnits <= 0) break;
+    energyCharge += slabUnits * (s.energy + s.fac + s.wheeling);
+    remaining -= slabUnits;
+    prev = s.limit;
+  }
+  return Math.round((fixedCharge + energyCharge) * 1.16);
+}
+
+/**
+ * Wraps each key extracted field in { value, confidence, source }.
+ * Confidence levels:
+ *   - Gemini-extracted non-empty field  → 75 (fixed moderate-high; Gemini has no native
+ *     per-field confidence score, so we use a conservative fixed value — flagged for review)
+ *   - Gemini-extracted but empty/dash   → 0  (must be manually entered)
+ *   - Template-fallback field            → 50 (synthetic data, always needs review)
+ *
+ * @param {object} parsedBill  Raw bill object from Gemini or template
+ * @param {string} ocrSource   "ocr-gemini" | "template-fallback"
+ * @returns {{ envelope: object, confidenceMap: object }}
+ */
+function buildConfidenceEnvelope(parsedBill, ocrSource) {
+  const GEMINI_CONFIDENCE  = 75; // Moderate-high fixed; Gemini has no native confidence score
+  const TEMPLATE_CONFIDENCE = 50; // Synthetic template data — always flag for review
+
+  function fieldConf(value) {
+    const isEmpty = !value || value === "—" || value === "0" || value === 0;
+    if (isEmpty) return 0;
+    return ocrSource === "ocr-gemini" ? GEMINI_CONFIDENCE : TEMPLATE_CONFIDENCE;
+  }
+
+  function wrap(key, value) {
+    const conf = fieldConf(value);
+    return { value: value ?? "—", confidence: conf, source: conf === 0 ? null : ocrSource };
+  }
+
+  const consumerName = parsedBill?.consumer?.name;
+  const provider     = parsedBill?.company?.name;
+  const billDate     = parsedBill?.consumer?.billDate;
+  const dueDate      = parsedBill?.consumer?.dueDate;
+  const unitsRaw     = parsedBill?.usage?.currUnits;
+  const amountRaw    = parsedBill?.usage?.currAmount;
+
+  const envelope = {
+    consumerName: wrap("consumerName", consumerName),
+    provider:     wrap("provider",     provider),
+    billDate:     wrap("billDate",     billDate),
+    dueDate:      wrap("dueDate",      dueDate),
+    units:        wrap("units",        unitsRaw),
+    amount:       wrap("amount",       amountRaw),
+  };
+
+  // Flat map of fieldName → source string (for DB storage)
+  const confidenceMap = {};
+  for (const [k, v] of Object.entries(envelope)) {
+    confidenceMap[k] = v.source || "manual";
+  }
+
+  return { envelope, confidenceMap };
+}
+
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
@@ -453,6 +534,7 @@ router.post("/extract", auth, upload.any(), async (req, res) => {
 
     // 1. Attempt AI Vision OCR
     let parsedBill = await extractBillWithAI(filesToProcess);
+    const usedAI = !!parsedBill; // track whether Gemini was used for confidence gating
 
     // 2. Fallback if AI unavailable or parsing returned null
     if (!parsedBill) {
@@ -486,6 +568,49 @@ router.post("/extract", auth, upload.any(), async (req, res) => {
     const units = parseFloat(String(unitsRaw).replace(/[^\d.]/g, "")) || 0;
     const amount = parseFloat(String(amountRaw).replace(/[^\d.]/g, "")) || 0;
 
+    // ── Build per-field confidence metadata ────────────────────────────────────────
+    const ocrSource = usedAI ? "ocr-gemini" : "template-fallback";
+    const { envelope: confidenceEnvelope, confidenceMap } = buildConfidenceEnvelope(parsedBill, ocrSource);
+
+    // ── Server-side range validation guard ────────────────────────────────────────
+    // Units must be in [0, 3000]. Amount must be within ±60% of what the deterministic
+    // tariff formula calculates for the given provider + units. Out-of-range values
+    // require an explicit "manualOverrideConfirmed" flag from the frontend.
+    const manualOverride = req.body?.manualOverrideConfirmed === true ||
+                           req.body?.manualOverrideConfirmed === "true";
+    const companyKey = getCompanyKey(parsedBill?.company?.name);
+    const validationErrors = [];
+
+    if (units > 0) { // only validate if units were extracted (skip for missing fields)
+      if (units < 0 || units > 3000) {
+        validationErrors.push(`Units value ${units} is outside the plausible range (0–3000 kWh).`);
+      } else if (amount > 0) {
+        const tariffEstimate = calculateDefaultTariff(companyKey, units);
+        if (tariffEstimate > 0) {
+          const lowerBound = tariffEstimate * 0.40; // allow 60% below tariff
+          const upperBound = tariffEstimate * 3.00; // allow up to 3x tariff
+          if (amount < lowerBound || amount > upperBound) {
+            validationErrors.push(
+              `Amount \u20b9${amount} is implausible for ${units} units with ${companyKey} tariff ` +
+              `(expected \u20b9${Math.round(lowerBound)}–\u20b9${Math.round(upperBound)}).`
+            );
+          }
+        }
+      }
+    }
+
+    if (validationErrors.length > 0 && !manualOverride) {
+      return res.status(422).json({
+        error: "OCR validation failed",
+        validationErrors,
+        requiresManualOverride: true,
+        hint: "Re-submit with manualOverrideConfirmed=true to save despite these warnings.",
+        // Still return the parsed data so the frontend can show the review form
+        parsedBill,
+        _confidence: confidenceEnvelope,
+      });
+    }
+
     if (req.user && req.user.id) {
       try {
         if (mongoose.Types.ObjectId.isValid(req.user.id)) {
@@ -500,6 +625,8 @@ router.post("/extract", auth, upload.any(), async (req, res) => {
             dueDate: parsedBill.consumer?.dueDate || "—",
             units,
             amount,
+            source: ocrSource,
+            fieldSources: confidenceMap,
           });
           await mainBill.save();
 
@@ -516,6 +643,8 @@ router.post("/extract", auth, upload.any(), async (req, res) => {
                   dueDate: "—",
                   units: hUnits,
                   amount: hAmt,
+                  source: ocrSource,
+                  fieldSources: { units: ocrSource, amount: ocrSource },
                 });
                 await histBill.save();
               }
@@ -533,6 +662,7 @@ router.post("/extract", auth, upload.any(), async (req, res) => {
               dueDate: parsedBill.consumer?.dueDate || "—",
               units,
               amount,
+              source: ocrSource,
               createdAt: new Date(),
             },
           ];
@@ -550,6 +680,7 @@ router.post("/extract", auth, upload.any(), async (req, res) => {
                 dueDate: "—",
                 units: hUnits,
                 amount: hAmt,
+                source: ocrSource,
                 createdAt: new Date(Date.now() - (i + 1) * 86400000 * 30),
               });
             }
@@ -565,6 +696,9 @@ router.post("/extract", auth, upload.any(), async (req, res) => {
       }
     }
 
+    // Attach confidence metadata to response so frontend can show review indicators
+    parsedBill._confidence = confidenceEnvelope;
+    parsedBill._ocrSource = ocrSource;
     return res.status(200).json(parsedBill);
   } catch (err) {
     console.error("Extract route error:", err.message);

@@ -1,3 +1,116 @@
+/* ===== OCR CONFIDENCE FIELD BADGES ===== */
+/* High confidence (>80%): subtle green indicator — pre-filled and editable */
+.ub-conf-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 8px;
+    vertical-align: middle;
+    letter-spacing: 0.3px;
+    cursor: help;
+}
+
+.ub-conf-high {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+}
+
+/* Moderate confidence (1-80%): amber — needs review */
+.ub-conf-review {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+}
+
+/* Zero confidence: red — manual entry required */
+.ub-conf-manual {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+
+/* Field row highlight based on confidence state */
+.ub-field-ocr-high {
+    background: #f0fdf4;
+    border-radius: 6px;
+}
+
+.ub-field-ocr-review {
+    background: #fffbeb;
+    border-left: 3px solid #f59e0b;
+    padding-left: 8px;
+    border-radius: 6px;
+}
+
+.ub-field-manual {
+    background: #fef2f2;
+    border-left: 3px solid #ef4444;
+    padding-left: 8px;
+    border-radius: 6px;
+}
+
+/* ===== SKIP OCR / ENTER MANUALLY BANNER ===== */
+.ub-manual-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f5f3ff;
+    border: 1px solid #d4c8ff;
+    border-radius: 10px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.ub-manual-banner-text {
+    font-size: 13px;
+    color: #4b5563;
+    font-weight: 500;
+}
+
+.ub-manual-toggle-btn {
+    background: #6D4AFF;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    white-space: nowrap;
+}
+
+.ub-manual-toggle-btn:hover {
+    opacity: 0.88;
+    transform: translateY(-1px);
+}
+
+/* ===== VALIDATION WARNING BANNER ===== */
+.ub-validation-warn {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: #fffbeb;
+    border: 1px solid #f59e0b;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: #78350f;
+    line-height: 1.5;
+}
+
+.ub-validation-warn ul {
+    margin-top: 6px;
+    padding-left: 18px;
+}
+
 .ub-subtitle {
     color: #6b7280;
     font-size: 14px;

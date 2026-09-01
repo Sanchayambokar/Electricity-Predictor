@@ -36,21 +36,42 @@ app = Flask(__name__)
 history_models = {}
 history_columns = {}
 
-# Load Model 1 (Default/Fallback)
-ensemble_model = joblib.load("ensemble_model.pkl")
-columns = joblib.load("feature_columns.pkl")
-print("Model 1 loaded. Columns:", columns)
-history_models[1] = ensemble_model
-history_columns[1] = columns
+# ── Unified Model Loading (Item 3: single model with cyclical month encoding) ─────
+# The 12 month-specific models (ensemble_model_2.pkl through ensemble_model_12.pkl)
+# have been replaced by a single unified model trained on the full dataset with
+# cyclical month features: month_sin = sin(2*pi*month/12), month_cos = cos(2*pi*month/12).
+# The old .pkl files are preserved on disk as backup but are no longer loaded.
+UNIFIED_MODEL_PATH = "ensemble_model_unified.pkl"
+UNIFIED_COLS_PATH  = "feature_columns_unified.pkl"
 
-# Load Models 2 to 12
-for i in range(2, 13):
-    model_path = f"ensemble_model_{i}.pkl"
-    cols_path = f"feature_columns_{i}.pkl"
-    if os.path.exists(model_path) and os.path.exists(cols_path):
-        history_models[i] = joblib.load(model_path)
-        history_columns[i] = joblib.load(cols_path)
-        print(f"Model {i} loaded. Columns count: {len(history_columns[i])}")
+if os.path.exists(UNIFIED_MODEL_PATH) and os.path.exists(UNIFIED_COLS_PATH):
+    unified_model   = joblib.load(UNIFIED_MODEL_PATH)
+    unified_columns = joblib.load(UNIFIED_COLS_PATH)
+    print(f"Unified model loaded. Feature columns ({len(unified_columns)}): {unified_columns}")
+    # Alias to existing variable names so both predict paths can fall through gracefully
+    ensemble_model = unified_model
+    columns        = unified_columns
+    history_models[1] = unified_model
+    history_columns[1] = unified_columns
+else:
+    # Fallback: load legacy month-1 model if unified model has not been trained yet
+    print("WARNING: ensemble_model_unified.pkl not found. Falling back to legacy ensemble_model.pkl.")
+    print("Run: python train_unified_model.py  to generate the unified model.")
+    ensemble_model = joblib.load("ensemble_model.pkl")
+    columns = joblib.load("feature_columns.pkl")
+    print("Legacy model 1 loaded. Columns:", columns)
+    history_models[1] = ensemble_model
+    history_columns[1] = columns
+    # Load month-specific models 2-12 as additional fallback
+    for i in range(2, 13):
+        model_path = f"ensemble_model_{i}.pkl"
+        cols_path  = f"feature_columns_{i}.pkl"
+        if os.path.exists(model_path) and os.path.exists(cols_path):
+            history_models[i]  = joblib.load(model_path)
+            history_columns[i] = joblib.load(cols_path)
+            print(f"Legacy model {i} loaded. Columns count: {len(history_columns[i])}")
+
+
 
 appliance_model = None
 appliance_columns = None
@@ -335,6 +356,16 @@ def predict():
         else:
             predictUnit = max(round(predicted_raw + extra_units), 0)  # Ensure non-negative
         
+        # ── Deterministic Amount Calculation ────────────────────────────────────────
+        # IMPORTANT: Amount is NEVER predicted by a machine-learning model.
+        # Predicting amount separately would just be re-learning the tariff slab formula
+        # that is already implemented deterministically in calculate_default_tariff().
+        # The correct pipeline (for both appliance and history paths) is:
+        #   1. Predict UNITS  (ML model output)
+        #   2. Compute AMOUNT = calculate_default_tariff(provider, predictUnit)
+        #      — or use user-supplied tariff rates if available.
+        # This keeps amount consistent with official provider tariff rules at all times.
+        # ──────────────────────────────────────────────────────────────────────────────
         # Calculate amount properly using tariff details if available
         fixed = parse_tariff_value(data.get("fixedCharge"))
         rate = parse_tariff_value(data.get("energyRate"))
@@ -467,9 +498,14 @@ def predict():
             cols_to_use = history_columns[consecutive_lags]
             
         if model_to_use is not None and cols_to_use is not None:
+            import math as _math
             print(f"{consecutive_lags}-month lag prediction model selected.")
             input_data = {
                 "Month": month,
+                # Cyclical month encoding for unified model.
+                "month_sin": _math.sin(2 * _math.pi * month / 12),
+                "month_cos": _math.cos(2 * _math.pi * month / 12),
+                "Month_Int": month,
                 "Temp": temp,
                 "Billing_Days": days_in_month.get(month, 30),
                 "Season_PostMonsoon": 1 if season == "PostMonsoon" else 0,
@@ -477,9 +513,11 @@ def predict():
                 "Season_Winter": 1 if season == "Winter" else 0,
                 "Tariff_Category_Commercial": 1 if tariff_category == "Commercial" else 0,
                 "Tariff_Category_Industrial": 1 if tariff_category == "Industrial" else 0,
-                "Tariff_Category_Residential": 1 if tariff_category == "Residential" else 0
+                "Tariff_Category_Residential": 1 if tariff_category == "Residential" else 0,
+                "Previous Month Unit (kWh)": units,
+                "Previous Bill Amount (Rs)": amount,
             }
-            # Add all required lags
+            # Add all required lags (legacy column names for backward compatibility)
             for lag in range(1, consecutive_lags + 1):
                 unit_col_name = "Units_30d" if lag == 1 else f"Units_{lag*30}d"
                 amt_col_name = "Amount" if lag == 1 else f"Amount_{lag*30}d"
@@ -487,7 +525,8 @@ def predict():
                 input_data[amt_col_name] = lags_data[lag]["amount"]
                 
             df = pd.DataFrame([input_data])
-            df = df[cols_to_use]
+            # reindex to the model's exact column list, filling missing columns with 0
+            df = df.reindex(columns=cols_to_use, fill_value=0)
             print(f"{consecutive_lags}-month DataFrame:\n", df)
             predicted_raw = float(model_to_use.predict(df)[0])
         else:
@@ -525,6 +564,19 @@ def predict():
         else:
             predictUnit = max(round(predicted_raw), 0)  # Ensure non-negative unit prediction
 
+        # ── Deterministic Amount Calculation ────────────────────────────────────────
+        # IMPORTANT: Amount is NEVER predicted by a machine-learning model.
+        # Predicting amount separately would just be re-learning the tariff slab formula
+        # that is already implemented deterministically in calculate_default_tariff().
+        # The correct pipeline (history path) is:
+        #   1. Predict UNITS  (ensemble ML model output)
+        #   2. Compute AMOUNT = calculate_default_tariff(provider, predictUnit)
+        #      — or use user-supplied tariff rates if available.
+        # This keeps amount consistent with official provider tariff rules at all times.
+        # NOTE: The proportional fallback below (amount * predictUnit / units) is used
+        # ONLY when the provider is unknown and no tariff data is available. It is
+        # explicitly NOT an ML prediction — it is a linear scaling heuristic.
+        # ──────────────────────────────────────────────────────────────────────────────
         # Calculate amount properly using tariff details if available
         fixed = parse_tariff_value(data.get("fixedCharge"))
         rate = parse_tariff_value(data.get("energyRate"))
