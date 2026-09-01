@@ -120,7 +120,7 @@ export default function Profile() {
     function handleSave() {
         setForm({ ...draft });
         localStorage.setItem("profileData", JSON.stringify(draft));
-        setEditMode(false);
+        setEditMode(false); 
     }
 
     function handleCancel() {
