@@ -1,7 +1,7 @@
 import "../styles/home.css";
 import "../styles/consumptionhistory.css";
 import { useState } from "react";
-import { Menu, ChevronDown, Zap, BarChart2, Flame, Leaf } from "lucide-react";
+import { Menu, ChevronDown, Zap, BarChart2, Flame, TrendingDown } from "lucide-react";
 import Sidebar_Menu from "./Sidebar_Menu";
 import { useNavigate } from "react-router-dom";
 import {
@@ -12,20 +12,7 @@ import {
 import { useEffect } from "react";
 import dayjs from "dayjs";
 
-const mockData = [
-    { month: "Jan", units: 420, season: "Winter" },
-    { month: "Feb", units: 390, season: "Winter" },
-    { month: "Mar", units: 480, season: "Summer" },
-    { month: "Apr", units: 510, season: "Summer" },
-    { month: "May", units: 560, season: "Summer" },
-    { month: "Jun", units: 530, season: "Monsoon" },
-    { month: "Jul", units: 500, season: "Monsoon" },
-    { month: "Aug", units: 490, season: "Monsoon" },
-    { month: "Sep", units: 470, season: "PostMonsoon" },
-    { month: "Oct", units: 440, season: "PostMonsoon" },
-    { month: "Nov", units: 500, season: "PostMonsoon" },
-    { month: "Dec", units: 460, season: "Winter" },
-];
+
 
 const seasonColors = {
     Winter: "#637be1",
@@ -34,8 +21,9 @@ const seasonColors = {
     PostMonsoon: "#995cf1",
 };
 
-const getSeason = (monthStr) => {
-    const m = monthStr.toLowerCase();
+const getSeason = (monthYear) => {
+    // Works with both "Jan" and "Jan 2026"
+    const m = monthYear.substring(0, 3).toLowerCase();
     if (["dec", "jan", "feb"].includes(m)) return "Winter";
     if (["mar", "apr", "may"].includes(m)) return "Summer";
     if (["jun", "jul", "aug", "sep"].includes(m)) return "Monsoon";
@@ -86,24 +74,47 @@ const parseBillDateToMonthYear = (rawDate) => {
     return rawDate;
 };
 
-const parseMonthName = (rawDate) => {
+// Returns the full "MMM YYYY" label (e.g. "Jun 2026") so the chart can show month + year
+const parseMonthYear = (rawDate) => {
     const parsed = parseBillDateToMonthYear(rawDate);
-    if (parsed) {
-        return parsed.split(" ")[0];
-    }
-    return "Jan";
+    return parsed || "Unknown";
 };
 
+// Custom tooltip: bold month+year header, KWh value below
 const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
+        const parts = String(label).split(" ");
+        const mon = parts[0] || label;
+        const yr  = parts[1] || "";
         return (
             <div className="ch-tooltip">
-                <p className="ch-tooltip-label">{label}</p>
+                <p className="ch-tooltip-label">
+                    {mon} <span style={{ color: "#6D4AFF", fontWeight: 700 }}>{yr}</span>
+                </p>
                 <p className="ch-tooltip-val">{payload[0].value} KWh</p>
             </div>
         );
     }
     return null;
+};
+
+// Custom XAxis tick: month name on top, year in smaller text below
+const MonthYearTick = ({ x, y, payload }) => {
+    const parts = String(payload.value).split(" ");
+    const mon = parts[0] || payload.value;
+    const yr  = parts[1] || "";
+    return (
+        <g transform={`translate(${x},${y})`}>
+            <text x={0} y={0} dy={12} textAnchor="middle" fill="#374151" fontSize={11} fontWeight={600}>
+                {mon}
+            </text>
+            {yr && (
+                <text x={0} y={0} dy={25} textAnchor="middle" fill="#9CA3AF" fontSize={10}>
+                    {yr}
+                </text>
+            )}
+        </g>
+    );
 };
 
 export default function ConsumptionHistory() {
@@ -138,14 +149,27 @@ export default function ConsumptionHistory() {
         fetchHistory();
     }, []);
 
+    // API returns newest-first; keep that for general use.
+    // month is stored as full "MMM YYYY" (e.g. "Jun 2026") for unambiguous display.
     const consumptionData = bills.map(b => {
-        const monthName = parseMonthName(b.billDate);
+        const monthYear = parseMonthYear(b.billDate);
         return {
-            month: monthName,
+            month: monthYear,
             units: b.units,
-            season: getSeason(monthName)
+            season: getSeason(monthYear)
         };
     });
+
+    // Chart data: chronological order (oldest → newest, left → right)
+    // Sort by year first, then month index — handles multi-year data correctly.
+    const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const toSortKey = (monthYear) => {
+        const parts = String(monthYear).split(" ");
+        const mIdx = MONTH_NAMES.indexOf(parts[0]);
+        const yr   = parseInt(parts[1], 10) || 0;
+        return yr * 12 + (mIdx === -1 ? 0 : mIdx);
+    };
+    const chartData = [...consumptionData].sort((a, b) => toSortKey(a.month) - toSortKey(b.month));
 
     const seasonData = Object.entries(
         consumptionData.reduce((acc, d) => {
@@ -157,6 +181,16 @@ export default function ConsumptionHistory() {
     const totalUnits = consumptionData.reduce((s, d) => s + d.units, 0);
     const avgUnits = consumptionData.length > 0 ? Math.round(totalUnits / consumptionData.length) : 0;
     const peakMonth = consumptionData.length > 0 ? consumptionData.reduce((a, b) => (a.units > b.units ? a : b)) : { month: "—", units: 0 };
+
+    // Dynamic Y-axis: peak + 10% headroom, rounded up to nearest 50
+    const yMax = consumptionData.length > 0
+        ? Math.ceil((peakMonth.units * 1.1) / 50) * 50
+        : 600;
+
+    // Lowest consumption month — the user's best month, a concrete target to beat
+    const lowestMonth = consumptionData.length > 0
+        ? consumptionData.reduce((a, b) => (a.units < b.units ? a : b))
+        : { month: "—", units: 0 };
 
     function handleLogout() {
         localStorage.removeItem("user");
@@ -244,11 +278,12 @@ export default function ConsumptionHistory() {
                         </div>
                         <div className="ch-stat-card">
                             <div className="ch-stat-icon" id="green">
-                                <Leaf size={22} color="#2ebc7f" />
+                                <TrendingDown size={22} color="#2ebc7f" />
                             </div>
                             <div>
-                                <p className="ch-stat-label">CO₂ Saved (est.)</p>
-                                <p className="ch-stat-value">{(totalUnits * 0.82).toFixed(0)} kg</p>
+                                <p className="ch-stat-label">Lowest Month</p>
+                                <p className="ch-stat-value">{lowestMonth.month}</p>
+                                <p className="ch-stat-sub">{lowestMonth.units > 0 ? `${lowestMonth.units} KWh` : "—"}</p>
                             </div>
                         </div>
                     </div>
@@ -303,7 +338,8 @@ export default function ConsumptionHistory() {
                             <div className="ch-chart-card ch-area">
                                 <h3>Monthly Consumption Trend</h3>
                                 <ResponsiveContainer width="100%" height={280}>
-                                    <AreaChart data={consumptionData} margin={{ top: 10, right: 10, left: -5, bottom: 30 }}>
+                                    {/* chartData is sorted chronologically: oldest → newest */}
+                                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -5, bottom: 30 }}>
                                         <defs>
                                             <linearGradient id="unitGradient" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor="#6D4AFF" stopOpacity={0.35} />
@@ -311,10 +347,18 @@ export default function ConsumptionHistory() {
                                             </linearGradient>
                                         </defs>
                                         <CartesianGrid vertical={false} stroke="#E5E7EB" />
-                                        <XAxis dataKey="month" tick={{ fontSize: 12 }}
-                                            label={{ value: "Month", position: "insideBottom", offset: -20 }} />
-                                        <YAxis tick={{ fontSize: 12 }}
-                                            label={{ value: "Units (KWh)", angle: -90, position: "insideLeft", offset: 15 }} />
+                                        <XAxis
+                                            dataKey="month"
+                                            tick={<MonthYearTick />}
+                                            height={50}
+                                            interval={0}
+                                            label={{ value: "Month", position: "insideBottom", offset: -4, fontSize: 12, fill: "#6b7280" }}
+                                        />
+                                        <YAxis
+                                            tick={{ fontSize: 12 }}
+                                            domain={[0, yMax]}
+                                            label={{ value: "Units (KWh)", angle: -90, position: "insideLeft", offset: 15 }}
+                                        />
                                         <Tooltip content={<CustomTooltip />} />
                                         <Area type="monotone" dataKey="units"
                                             stroke="#6D4AFF" strokeWidth={3}

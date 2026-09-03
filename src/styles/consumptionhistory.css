@@ -108,7 +108,22 @@
     display: inline-block;
 }
 
+/* ── CO₂ info icon ── */
+.ch-co2-info {
+    display: inline-flex;
+    align-items: center;
+    cursor: help;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+}
+
+.ch-co2-info:hover {
+    opacity: 1;
+}
+
 /* ===== RESPONSIVE CONSUMPTION HISTORY LAYOUT ===== */
+
 
 @media (max-width: 1024px) {
     .ch-stats {

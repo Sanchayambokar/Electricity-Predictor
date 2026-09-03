@@ -6,26 +6,12 @@ import Sidebar_Menu from "./Sidebar_Menu";
 import { useNavigate } from "react-router-dom";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
-    Tooltip, ResponsiveContainer, Cell
+    Tooltip, ResponsiveContainer, Cell,
+    AreaChart, Area
 } from "recharts";
 
 import { useEffect } from "react";
 import dayjs from "dayjs";
-
-const mockData = [
-    { month: "Jan 2026", units: 420, amount: 3780, status: "Paid" },
-    { month: "Feb 2026", units: 390, amount: 3510, status: "Paid" },
-    { month: "Mar 2026", units: 480, amount: 4320, status: "Paid" },
-    { month: "Apr 2026", units: 510, amount: 4590, status: "Paid" },
-    { month: "May 2026", units: 560, amount: 5040, status: "Paid" },
-    { month: "Jun 2026", units: 530, amount: 4770, status: "Paid" },
-    { month: "Jul 2026", units: 500, amount: 4500, status: "Paid" },
-    { month: "Aug 2026", units: 490, amount: 4410, status: "Paid" },
-    { month: "Sep 2026", units: 470, amount: 4230, status: "Paid" },
-    { month: "Oct 2026", units: 440, amount: 3960, status: "Paid" },
-    { month: "Nov 2026", units: 500, amount: 4500, status: "Paid" },
-    { month: "Dec 2026", units: 460, amount: 4140, status: "Pending" },
-];
 
 const parseBillDateToMonthYear = (rawDate) => {
     if (!rawDate || rawDate === "—") return "";
@@ -75,6 +61,16 @@ const parseBillDate = (rawDate) => {
     return parseBillDateToMonthYear(rawDate) || "Unknown";
 };
 
+// Sort helper: convert "Jan 2025" → numeric value for chronological ordering
+const monthYearToSortKey = (label) => {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const parts = label.split(" ");
+    if (parts.length !== 2) return 0;
+    const mIdx = months.indexOf(parts[0]);
+    const yr = parseInt(parts[1], 10) || 0;
+    return yr * 12 + mIdx;
+};
+
 const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
         return (
@@ -86,6 +82,77 @@ const CustomTooltip = ({ active, payload, label }) => {
     }
     return null;
 };
+
+// ── Mini Sparkline: tiny area chart, no axes, no grid ──
+function MiniSparkline({ data, color }) {
+    if (!data || data.length < 2) return null;
+    const points = data.map((v, i) => ({ i, v }));
+    const gradId = `sg-${color.replace("#", "")}`;
+    return (
+        <div className="bh-sparkline">
+            <AreaChart width={88} height={40} data={points} margin={{ top: 4, right: 2, left: 2, bottom: 0 }}>
+                <defs>
+                    <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={color} stopOpacity={0.35} />
+                        <stop offset="95%" stopColor={color} stopOpacity={0} />
+                    </linearGradient>
+                </defs>
+                <Area
+                    type="monotone"
+                    dataKey="v"
+                    stroke={color}
+                    strokeWidth={2}
+                    fill={`url(#${gradId})`}
+                    dot={false}
+                    isAnimationActive={true}
+                    animationDuration={900}
+                />
+            </AreaChart>
+        </div>
+    );
+}
+
+// ── Peak Ratio Bar: shows how far above average the highest bill is ──
+function PeakRatioBar({ highest, avg }) {
+    if (!highest || !avg || avg === 0) return null;
+    const ratio = Math.min(highest / avg, 2); // cap at 2× for display
+    const pct = Math.round((ratio / 2) * 100);
+    const overPct = Math.round((highest / avg - 1) * 100);
+    return (
+        <div className="bh-peak-bar-wrap" title={`${overPct}% above average`}>
+            <div className="bh-peak-bar-track">
+                <div className="bh-peak-bar-fill" style={{ width: `${pct}%` }} />
+                <div className="bh-peak-bar-avg" />
+            </div>
+            <span className="bh-peak-bar-label">{overPct}% above avg</span>
+        </div>
+    );
+}
+
+// ── Dot Strip: one dot per bill recorded ──
+function DotStrip({ count, max = 12 }) {
+    const slots = Math.min(Math.max(count, 1), max);
+    return (
+        <div className="bh-dot-strip">
+            {Array.from({ length: slots }).map((_, i) => (
+                <span key={i} className={`bh-dot ${i < count ? "filled" : ""}`} />
+            ))}
+        </div>
+    );
+}
+
+// ₹0 amount cell with tooltip
+function AmountCell({ amount }) {
+    if (amount === 0 || amount === null || amount === undefined) {
+        return (
+            <span className="bh-zero-amount" title="Amount data is missing or the bill was fully subsidised for this month.">
+                N/A
+                <span className="bh-zero-tooltip-icon">?</span>
+            </span>
+        );
+    }
+    return <>₹{amount.toLocaleString()}</>;
+}
 
 export default function BillHistory() {
     const [collapsed, setCollapsed] = useState(window.innerWidth < 1024);
@@ -118,6 +185,7 @@ export default function BillHistory() {
         fetchHistory();
     }, []);
 
+    // API returns newest-first; we map and keep the original order (newest-first) for the table
     const billData = bills.map(b => ({
         month: parseBillDate(b.billDate),
         units: b.units,
@@ -125,9 +193,20 @@ export default function BillHistory() {
         status: "Paid"
     }));
 
-    const totalPaid = billData.reduce((s, d) => s + d.amount, 0);
+    // --- Summary stats ---
+    const totalPaid = billData.reduce((s, d) => s + (d.amount || 0), 0);
     const avgBill = billData.length > 0 ? Math.round(totalPaid / billData.length) : 0;
-    const highest = billData.length > 0 ? billData.reduce((a, b) => (a.amount > b.amount ? a : b)) : { month: "—", amount: 0 };
+    const highest = billData.length > 0
+        ? billData.reduce((a, b) => (a.amount > b.amount ? a : b))
+        : { month: "—", amount: 0 };
+
+    // Chronological amount values for sparklines (oldest → newest)
+    const sparklineAmounts = [...billData]
+        .sort((a, b) => monthYearToSortKey(a.month) - monthYearToSortKey(b.month))
+        .map(d => d.amount || 0);
+
+    // --- Chart data: chronological (oldest → newest, left → right) ---
+    const chartData = [...billData].sort((a, b) => monthYearToSortKey(a.month) - monthYearToSortKey(b.month));
 
     function handleLogout() {
         localStorage.removeItem("user");
@@ -185,41 +264,52 @@ export default function BillHistory() {
                     </div>
 
                     <div className="bh-stats">
+                        {/* Total Paid */}
                         <div className="bh-stat-card">
                             <div className="bh-stat-icon" id="purple">
                                 <IndianRupee size={22} color="#995cf1" />
                             </div>
-                            <div>
+                            <div className="bh-stat-body">
                                 <p className="bh-stat-label">Total Paid</p>
                                 <p className="bh-stat-value">₹{totalPaid.toLocaleString()}</p>
                             </div>
+                            <MiniSparkline data={sparklineAmounts} color="#995cf1" />
                         </div>
+
+                        {/* Average Monthly Bill */}
                         <div className="bh-stat-card">
                             <div className="bh-stat-icon" id="blue">
                                 <TrendingUp size={22} color="#637be1" />
                             </div>
-                            <div>
+                            <div className="bh-stat-body">
                                 <p className="bh-stat-label">Average Monthly Bill</p>
                                 <p className="bh-stat-value">₹{avgBill.toLocaleString()}</p>
                             </div>
+                            <MiniSparkline data={sparklineAmounts} color="#637be1" />
                         </div>
+
+                        {/* Highest Bill Month */}
                         <div className="bh-stat-card">
                             <div className="bh-stat-icon" id="orange">
                                 <TrendingDown size={22} color="#f8b537" />
                             </div>
-                            <div>
+                            <div className="bh-stat-body">
                                 <p className="bh-stat-label">Highest Bill Month</p>
                                 <p className="bh-stat-value">{highest.month}</p>
                                 <p className="bh-stat-sub">₹{highest.amount.toLocaleString()}</p>
+                                <PeakRatioBar highest={highest.amount} avg={avgBill} />
                             </div>
                         </div>
+
+                        {/* Bills Recorded */}
                         <div className="bh-stat-card">
                             <div className="bh-stat-icon" id="green">
                                 <Calendar size={22} color="#2ebc7f" />
                             </div>
-                            <div>
+                            <div className="bh-stat-body">
                                 <p className="bh-stat-label">Bills Recorded</p>
                                 <p className="bh-stat-value">{billData.length} {billData.length === 1 ? "Month" : "Months"}</p>
+                                <DotStrip count={billData.length} />
                             </div>
                         </div>
                     </div>
@@ -271,25 +361,33 @@ export default function BillHistory() {
                         </div>
                     ) : (
                         <div className="bh-main-grid">
+                            {/* ── Chart: chronological order (oldest left → newest right) ── */}
                             <div className="bh-chart-card">
                                 <h3>Monthly Bill Overview</h3>
                                 <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={billData} margin={{ top: 10, right: 10, left: -5, bottom: 30 }}>
+                                    <BarChart data={chartData} margin={{ top: 10, right: 10, left: -5, bottom: 30 }}>
                                         <CartesianGrid vertical={false} stroke="#E5E7EB" />
-                                        <XAxis dataKey="month" tick={{ fontSize: 11 }}
+                                        <XAxis
+                                            dataKey="month"
+                                            tick={{ fontSize: 11 }}
                                             tickFormatter={(v) => v.split(" ")[0]}
-                                            label={{ value: "Month", position: "insideBottom", offset: -20 }} />
+                                            label={{ value: "Month", position: "insideBottom", offset: -20 }}
+                                        />
                                         <YAxis tickFormatter={(v) => `${v / 1000}K`} tick={{ fontSize: 12 }} />
                                         <Tooltip content={<CustomTooltip />} />
                                         <Bar dataKey="amount" radius={[6, 6, 0, 0]} animationDuration={1200}>
-                                            {billData.map((entry, i) => (
-                                                <Cell key={`cell-${entry.month || i}`} fill={entry.amount === highest.amount ? "#6D4AFF" : "#C4B5FD"} />
+                                            {chartData.map((entry, i) => (
+                                                <Cell
+                                                    key={`cell-${entry.month || i}`}
+                                                    fill={entry.amount === highest.amount ? "#6D4AFF" : "#C4B5FD"}
+                                                />
                                             ))}
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
 
+                            {/* ── Table: newest first ── */}
                             <div className="bh-table-card">
                                 <h3>Bill Details</h3>
                                 <div className="bh-table-wrap">
@@ -303,11 +401,14 @@ export default function BillHistory() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {[...billData].reverse().map((row, i) => (
+                                            {/* billData is already newest-first from the API sort */}
+                                            {billData.map((row, i) => (
                                                 <tr key={`row-${row.month || i}`}>
                                                     <td>{row.month}</td>
                                                     <td>{row.units}</td>
-                                                    <td>₹{row.amount.toLocaleString()}</td>
+                                                    <td>
+                                                        <AmountCell amount={row.amount} />
+                                                    </td>
                                                     <td>
                                                         <span className={`bh-badge ${row.status === "Paid" ? "paid" : "pending"}`}>
                                                             {row.status}
