@@ -14,7 +14,7 @@ export default function Profile() {
 
     // Static defaults — shown the very first time, before any edits
     const DEFAULTS = {
-        phone: "+91 ",
+        name: user?.name || "",
         address: "Mumbai, Maharashtra",
         provider: "MSEDCL",
         meterNumber: "MH-2045-87632",
@@ -35,6 +35,10 @@ export default function Profile() {
     const [form, setForm] = useState(getSavedData);
     // Draft holds in-progress edits; only committed on Save
     const [draft, setDraft] = useState({ ...form });
+
+    // Dynamically calculate initials based on current name so it updates instantly while typing
+    const currentName = editMode ? draft.name : form.name;
+    const displayInitials = (currentName || "").split(' ').filter(n => n).map(n => n[0]).join('').substring(0, 2).toUpperCase() || "U";
 
     const [stats, setStats] = useState({ predictions: 0, memberSince: new Date().getFullYear(), avgBill: "₹0" });
 
@@ -117,9 +121,34 @@ export default function Profile() {
         setDraft(prev => ({ ...prev, [e.target.name]: e.target.value }));
     }
 
-    function handleSave() {
+    async function handleSave() {
         setForm({ ...draft });
         localStorage.setItem("profileData", JSON.stringify(draft));
+        
+        // Update global user object locally
+        if (user && draft.name) {
+            user.name = draft.name;
+            user.initials = draft.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+            localStorage.setItem("user", JSON.stringify(user));
+            
+            // Sync the updated name with the backend database
+            try {
+                const token = localStorage.getItem("token");
+                if (token) {
+                    await fetch("/api/auth/profile", {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`
+                        },
+                        body: JSON.stringify(draft)
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to sync profile to backend:", err);
+            }
+        }
+        
         setEditMode(false); 
     }
 
@@ -148,8 +177,8 @@ export default function Profile() {
                             <Menu />
                         </div>
                         <div className="profile" onClick={() => setShowProfileMenu(!showProfileMenu)}>
-                            <div className="avatar">{user?.initials}</div>
-                            {user?.name}
+                            <div className="avatar">{displayInitials}</div>
+                            {form.name}
                             <ChevronDown />
                             {showProfileMenu && (
                                 <div className="profile-dropdown">
@@ -166,8 +195,8 @@ export default function Profile() {
                     <div className="pf-grid">
                         <div className="pf-left">
                             <div className="pf-avatar-card">
-                                <div className="pf-big-avatar">{user?.initials}</div>
-                                <h3 className="pf-name">{user?.name}</h3>
+                                <div className="pf-big-avatar">{displayInitials}</div>
+                                <h3 className="pf-name">{form.name}</h3>
                                 <p className="pf-email">{user?.email}</p>
                                 <span className="pf-role-badge">Residential User</span>
                                 <div className="pf-stats-row">
@@ -213,25 +242,18 @@ export default function Profile() {
                                 <div className="pf-fields">
                                     <div className="pf-field">
                                         <label><User size={14} /> Full Name</label>
-                                        <input value={user?.name || ""} disabled className="pf-input disabled" />
+                                        <input
+                                            name="name"
+                                            value={editMode ? draft.name : form.name}
+                                            onChange={handleChange}
+                                            disabled={!editMode}
+                                            className={`pf-input ${!editMode ? "disabled" : ""}`} />
                                     </div>
                                     <div className="pf-field">
                                         <label><Mail size={14} /> Email Address</label>
                                         <input value={user?.email || ""} disabled className="pf-input disabled" />
                                     </div>
-                                    <div className="pf-field">
-                                        <label><Phone size={14} /> Phone Number</label>
-                                        <input
-                                            name="phone"
-                                            maxLength="10"
-                                            value={editMode ? draft.phone : form.phone}
-                                            onChange={(e) => {
-                                                e.target.value = e.target.value.replace(/[^0-9]/g, '');
-                                                handleChange(e);
-                                            }}
-                                            disabled={!editMode}
-                                            className={`pf-input ${!editMode ? "disabled" : ""}`} />
-                                    </div>
+
                                     <div className="pf-field">
                                         <label><MapPin size={14} /> Address</label>
                                         <input

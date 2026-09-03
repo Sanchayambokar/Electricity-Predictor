@@ -1087,3 +1087,98 @@
     color: #4b5563;
     margin-bottom: 4px;
 }
+
+/* ── Premium Predict Action Button ──────────────────────────────────────── */
+
+@keyframes ub-predict-shimmer {
+    0%   { transform: translateX(-120%) skewX(-15deg); }
+    100% { transform: translateX(220%)  skewX(-15deg); }
+}
+
+.ub-predict-action-btn {
+    position: relative;
+    overflow: hidden;
+    margin-top: 14px;
+    width: 100%;
+    padding: 13px 20px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    /* Violet → Indigo gradient */
+    background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+    /* Diffused neon-purple glow — the "lifted off the card" effect */
+    box-shadow:
+        0 0 20px rgba(124, 58, 237, 0.4),
+        0 4px 14px rgba(79, 70, 229, 0.3);
+    color: #ffffff;
+    font-family: inherit;
+    transition:
+        box-shadow 0.25s ease,
+        transform  0.18s ease,
+        background 0.25s ease;
+}
+
+.ub-predict-action-btn:hover {
+    background: linear-gradient(135deg, #6d28d9 0%, #4338ca 100%);
+    box-shadow:
+        0 0 32px rgba(124, 58, 237, 0.6),
+        0 6px 20px rgba(79, 70, 229, 0.45);
+    transform: translateY(-2px);
+}
+
+.ub-predict-action-btn:active {
+    transform: translateY(0);
+    box-shadow:
+        0 0 16px rgba(124, 58, 237, 0.35),
+        0 2px 8px rgba(79, 70, 229, 0.25);
+}
+
+/* Animated shimmer sweep */
+.ub-predict-action-btn__shimmer {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.18) 50%,
+        transparent 100%
+    );
+    animation: ub-predict-shimmer 3.2s ease-in-out infinite;
+}
+
+/* Inner content row */
+.ub-predict-action-btn__content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+/* Text stack — label + sub-label */
+.ub-predict-action-btn__text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    line-height: 1.15;
+}
+
+.ub-predict-action-btn__text strong {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: #ffffff;
+}
+
+.ub-predict-action-btn__text small {
+    font-size: 11px;
+    font-weight: 400;
+    color: rgba(199, 210, 254, 0.9); /* indigo-200 at 90% opacity */
+    letter-spacing: 0.015em;
+}
+

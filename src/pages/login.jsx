@@ -30,6 +30,9 @@ export default function LoginPage() {
   
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
+      if (res.data.profileData) {
+          localStorage.setItem("profileData", JSON.stringify(res.data.profileData));
+      }
       navigator("/uploadbill");
     } catch (err) {
       setError(

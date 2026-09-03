@@ -5,6 +5,8 @@ const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 const fs = require("fs");
 const path = require("path");
+const mongoose = require("mongoose");
+const auth = require("../middleware/auth");
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "ElectricityAnalyser";
@@ -191,6 +193,13 @@ router.post("/login", async (req, res) => {
                 name: user.fname + " " + user.lname,
                 email: user.email,
                 initials: user.fname.charAt(0).toUpperCase() + user.lname.charAt(0).toUpperCase()
+            },
+            profileData: {
+                address: user.address,
+                provider: user.provider,
+                meterNumber: user.meterNumber,
+                plan: user.plan,
+                connectionType: user.connectionType
             }
         });
       }
@@ -218,6 +227,13 @@ router.post("/login", async (req, res) => {
             name: memUser.fname + " " + memUser.lname,
             email: memUser.email,
             initials: memUser.fname.charAt(0).toUpperCase() + memUser.lname.charAt(0).toUpperCase()
+        },
+        profileData: {
+            address: memUser.address,
+            provider: memUser.provider,
+            meterNumber: memUser.meterNumber,
+            plan: memUser.plan,
+            connectionType: memUser.connectionType
         }
     });
 
@@ -411,6 +427,69 @@ router.post("/reset-password", async (req, res) => {
   } catch (error) {
     console.error("Reset password error:", error.message);
     return res.status(500).json({ message: error.message || "Failed to reset password" });
+  }
+});
+
+// UPDATE PROFILE
+router.put("/profile", auth, async (req, res) => {
+  try {
+    const { name, address, provider, meterNumber, plan, connectionType } = req.body;
+    
+    if (!name) return res.status(400).json({ message: "Name is required" });
+
+    const parts = name.trim().split(" ");
+    const fname = parts[0];
+    const lname = parts.slice(1).join(" ") || "";
+
+    let updated = false;
+    const isMongoId = mongoose.Types.ObjectId.isValid(req.user.id) && String(new mongoose.Types.ObjectId(req.user.id)) === String(req.user.id);
+
+    // Check MongoDB
+    if (isMongoId) {
+      try {
+        const user = await User.findById(req.user.id);
+        if (user) {
+          user.fname = fname;
+          user.lname = lname;
+          if (address !== undefined) user.address = address;
+          if (provider !== undefined) user.provider = provider;
+          if (meterNumber !== undefined) user.meterNumber = meterNumber;
+          if (plan !== undefined) user.plan = plan;
+          if (connectionType !== undefined) user.connectionType = connectionType;
+          await user.save();
+          updated = true;
+          console.log(`Profile updated (MongoDB) for: ${user.email}`);
+        }
+      } catch (dbErr) {
+        console.warn("MongoDB update-profile error:", dbErr.message);
+      }
+    }
+
+    // Check In-Memory
+    if (!updated) {
+      const memUser = memoryUsers.find((u) => u._id === req.user.id);
+      if (memUser) {
+        memUser.fname = fname;
+        memUser.lname = lname;
+        if (address !== undefined) memUser.address = address;
+        if (provider !== undefined) memUser.provider = provider;
+        if (meterNumber !== undefined) memUser.meterNumber = meterNumber;
+        if (plan !== undefined) memUser.plan = plan;
+        if (connectionType !== undefined) memUser.connectionType = connectionType;
+        saveMemoryUsers();
+        updated = true;
+        console.log(`Profile updated (In-Memory) for: ${memUser.email}`);
+      }
+    }
+
+    if (!updated) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    return res.status(200).json({ message: "Profile updated successfully!" });
+  } catch (error) {
+    console.error("Update profile error:", error.message);
+    return res.status(500).json({ message: error.message || "Failed to update profile" });
   }
 });
 

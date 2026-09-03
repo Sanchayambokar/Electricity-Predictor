@@ -123,6 +123,26 @@ export default function UploadBill() {
             if (!res.ok) throw new Error(data.detail || data.error || data.message || "Extraction failed");
 
             setExtracted(data);
+            
+            // Auto-update Profile electricity details from the extracted bill
+            try {
+                const savedProfile = JSON.parse(localStorage.getItem("profileData") || "{}");
+                const newProvider = data?.company?.name;
+                const newMeter = data?.consumer?.connection;
+                const newPlan = data?.consumer?.tariffCategory;
+                
+                let updated = false;
+                if (newProvider && newProvider !== "—") { savedProfile.provider = newProvider; updated = true; }
+                if (newMeter && newMeter !== "—") { savedProfile.meterNumber = newMeter; updated = true; }
+                if (newPlan && newPlan !== "—") { savedProfile.plan = newPlan; updated = true; }
+                
+                if (updated) {
+                    localStorage.setItem("profileData", JSON.stringify(savedProfile));
+                }
+            } catch (err) {
+                console.warn("Failed to auto-update profile from bill:", err);
+            }
+
             setProcessing(false);
             setActiveTab("details");
         } catch (err) {
@@ -843,22 +863,15 @@ function ExtractedContent({ data: d }) {
                     <button className="ub-download-btn" onClick={handleDownloadPDF}>
                         <Download size={16} /> Download Extracted Data
                     </button>
-                    <button className="ub-predict-action-btn" onClick={handleGoToPredict} style={{
-                        marginTop: "12px",
-                        backgroundColor: "#6D4AFF",
-                        color: "white",
-                        padding: "10px 16px",
-                        borderRadius: "8px",
-                        border: "none",
-                        fontWeight: "600",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "8px",
-                        cursor: "pointer",
-                        width: "100%"
-                    }}>
-                        <Zap size={16} /> Predict Next Month Bill
+                    <button className="ub-predict-action-btn" onClick={handleGoToPredict}>
+                        <span className="ub-predict-action-btn__shimmer" />
+                        <span className="ub-predict-action-btn__content">
+                            <Zap size={18} />
+                            <span className="ub-predict-action-btn__text">
+                                <strong>Predict Next Month Bill</strong>
+                                <small>AI-powered estimate in seconds</small>
+                            </span>
+                        </span>
                     </button>
                 </div>
             </div>

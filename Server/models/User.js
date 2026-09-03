@@ -22,6 +22,11 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  address: { type: String, default: "" },
+  provider: { type: String, default: "" },
+  meterNumber: { type: String, default: "" },
+  plan: { type: String, default: "" },
+  connectionType: { type: String, default: "" },
   resetTokenExpiry: {
     type: Date,
     default: null

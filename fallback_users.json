@@ -33,5 +33,12 @@
     "lname": "Ambokar",
     "email": "ambokarsanchay4@gmail.com",
     "password": "$2b$10$nziYjR6CmWxU/refhCfb/ur2Lzldqej//I0LMittu50rHNlXgZmqK"
+  },
+  {
+    "_id": "mem_1788445886420",
+    "fname": "Sanchay",
+    "lname": "Ambokar",
+    "email": "amb@gmail.com",
+    "password": "$2b$10$B7wVFXmCEqs1qhirFA3IWu4nqjw5wsB/LRc/OjsOPqFP5lTRTFwg."
   }
 ]
