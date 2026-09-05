@@ -5,6 +5,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 
+dotenv.config();
+
 // CommonJS module imports for backend models and routes
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
@@ -14,8 +16,6 @@ const authRoutes = require("./Server/routes/auth.js");
 const predictRoute = require("./Server/routes/predictRoute.js");
 const extractRoute = require("./Server/routes/extractRoute.js");
 const historyRoute = require("./Server/routes/historyRoute.js");
-
-dotenv.config();
 
 // Connect MongoDB if available
 connectDB();

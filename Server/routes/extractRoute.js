@@ -205,7 +205,7 @@ Extraction Guidelines:
 4. Clean all strings, format currency with ₹ where appropriate, and ensure valid JSON output with no markdown fences.`;
 
   // Candidate models in order of priority (using stable high-availability flash models first)
-  const candidateModels = ["gemini-3.6-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+  const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"];
 
   for (const model of candidateModels) {
     try {
@@ -536,9 +536,9 @@ router.post("/extract", auth, upload.any(), async (req, res) => {
     let parsedBill = await extractBillWithAI(filesToProcess);
     const usedAI = !!parsedBill; // track whether Gemini was used for confidence gating
 
-    // 2. Fallback if AI unavailable or parsing returned null
+    // 2. Return error if AI unavailable or parsing returned null
     if (!parsedBill) {
-      parsedBill = generateRealisticBillData(filesToProcess[0].originalname, filesToProcess[0].buffer);
+      return res.status(500).json({ error: "Failed to extract bill data using AI" });
     }
 
     if (!parsedBill.summary) parsedBill.summary = {};
