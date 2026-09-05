@@ -11,10 +11,14 @@ const { GoogleGenAI } = require("@google/genai");
 const memoryBills = [];
 
 let aiClient = null;
+let currentApiKey = null;
 function getGenAI() {
-  if (!aiClient && process.env.GEMINI_API_KEY) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  if (!aiClient || currentApiKey !== key) {
+    currentApiKey = key;
     aiClient = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
+      apiKey: key,
     });
   }
   return aiClient;
@@ -33,11 +37,11 @@ function getCompanyKey(name) {
 
 // ── Tariff slab tables (mirrors the Flask/predictRoute logic) ─────────────────────────
 const tariffs = {
-  tata:    [{ limit: 100, fixed: 90,  energy: 4.43,  fac: 0.0,  wheeling: 2.76, duty: 16 }, { limit: 300, fixed: 135, energy: 9.64,  fac: 0.0,  wheeling: 2.76, duty: 16 }, { limit: 500, fixed: 135, energy: 12.83, fac: 0.0,  wheeling: 2.76, duty: 16 }, { limit: Infinity, fixed: 160, energy: 14.33, fac: 0.0,  wheeling: 2.76, duty: 16 }],
-  msedcl:  [{ limit: 100, fixed: 130, energy: 3.96,  fac: 0.15, wheeling: 1.60, duty: 16 }, { limit: 300, fixed: 130, energy: 10.80, fac: 0.25, wheeling: 1.60, duty: 16 }, { limit: 500, fixed: 130, energy: 15.03, fac: 0.35, wheeling: 1.60, duty: 16 }, { limit: Infinity, fixed: 130, energy: 17.53, fac: 0.40, wheeling: 1.60, duty: 16 }],
-  adani:   [{ limit: 100, fixed: 90,  energy: 2.65,  fac: 0.65, wheeling: 2.28, duty: 16 }, { limit: 300, fixed: 135, energy: 5.85,  fac: 0.65, wheeling: 2.28, duty: 16 }, { limit: 500, fixed: 135, energy: 7.10,  fac: 0.65, wheeling: 2.28, duty: 16 }, { limit: Infinity, fixed: 160, energy: 8.35,  fac: 0.65, wheeling: 2.28, duty: 16 }],
-  torrent: [{ limit: 100, fixed: 130, energy: 4.28,  fac: 0.10, wheeling: 1.47, duty: 16 }, { limit: 300, fixed: 130, energy: 11.10, fac: 0.15, wheeling: 1.47, duty: 16 }, { limit: 500, fixed: 130, energy: 15.38, fac: 0.20, wheeling: 1.47, duty: 16 }, { limit: Infinity, fixed: 130, energy: 17.68, fac: 0.20, wheeling: 1.47, duty: 16 }],
-  best:    [{ limit: 100, fixed: 90,  energy: 2.10,  fac: 0.75, wheeling: 1.87, duty: 16 }, { limit: 300, fixed: 135, energy: 5.50,  fac: 0.75, wheeling: 1.87, duty: 16 }, { limit: 500, fixed: 135, energy: 10.18, fac: 0.75, wheeling: 1.87, duty: 16 }, { limit: Infinity, fixed: 160, energy: 11.55, fac: 0.75, wheeling: 1.87, duty: 16 }],
+  tata: [{ limit: 100, fixed: 90, energy: 4.43, fac: 0.0, wheeling: 2.76, duty: 16 }, { limit: 300, fixed: 135, energy: 9.64, fac: 0.0, wheeling: 2.76, duty: 16 }, { limit: 500, fixed: 135, energy: 12.83, fac: 0.0, wheeling: 2.76, duty: 16 }, { limit: Infinity, fixed: 160, energy: 14.33, fac: 0.0, wheeling: 2.76, duty: 16 }],
+  msedcl: [{ limit: 100, fixed: 130, energy: 3.96, fac: 0.15, wheeling: 1.60, duty: 16 }, { limit: 300, fixed: 130, energy: 10.80, fac: 0.25, wheeling: 1.60, duty: 16 }, { limit: 500, fixed: 130, energy: 15.03, fac: 0.35, wheeling: 1.60, duty: 16 }, { limit: Infinity, fixed: 130, energy: 17.53, fac: 0.40, wheeling: 1.60, duty: 16 }],
+  adani: [{ limit: 100, fixed: 90, energy: 2.65, fac: 0.65, wheeling: 2.28, duty: 16 }, { limit: 300, fixed: 135, energy: 5.85, fac: 0.65, wheeling: 2.28, duty: 16 }, { limit: 500, fixed: 135, energy: 7.10, fac: 0.65, wheeling: 2.28, duty: 16 }, { limit: Infinity, fixed: 160, energy: 8.35, fac: 0.65, wheeling: 2.28, duty: 16 }],
+  torrent: [{ limit: 100, fixed: 130, energy: 4.28, fac: 0.10, wheeling: 1.47, duty: 16 }, { limit: 300, fixed: 130, energy: 11.10, fac: 0.15, wheeling: 1.47, duty: 16 }, { limit: 500, fixed: 130, energy: 15.38, fac: 0.20, wheeling: 1.47, duty: 16 }, { limit: Infinity, fixed: 130, energy: 17.68, fac: 0.20, wheeling: 1.47, duty: 16 }],
+  best: [{ limit: 100, fixed: 90, energy: 2.10, fac: 0.75, wheeling: 1.87, duty: 16 }, { limit: 300, fixed: 135, energy: 5.50, fac: 0.75, wheeling: 1.87, duty: 16 }, { limit: 500, fixed: 135, energy: 10.18, fac: 0.75, wheeling: 1.87, duty: 16 }, { limit: Infinity, fixed: 160, energy: 11.55, fac: 0.75, wheeling: 1.87, duty: 16 }],
 };
 
 /**
@@ -73,7 +77,7 @@ function calculateDefaultTariff(companyKey, units) {
  * @returns {{ envelope: object, confidenceMap: object }}
  */
 function buildConfidenceEnvelope(parsedBill, ocrSource) {
-  const GEMINI_CONFIDENCE  = 75; // Moderate-high fixed; Gemini has no native confidence score
+  const GEMINI_CONFIDENCE = 75; // Moderate-high fixed; Gemini has no native confidence score
   const TEMPLATE_CONFIDENCE = 50; // Synthetic template data — always flag for review
 
   function fieldConf(value) {
@@ -88,19 +92,19 @@ function buildConfidenceEnvelope(parsedBill, ocrSource) {
   }
 
   const consumerName = parsedBill?.consumer?.name;
-  const provider     = parsedBill?.company?.name;
-  const billDate     = parsedBill?.consumer?.billDate;
-  const dueDate      = parsedBill?.consumer?.dueDate;
-  const unitsRaw     = parsedBill?.usage?.currUnits;
-  const amountRaw    = parsedBill?.usage?.currAmount;
+  const provider = parsedBill?.company?.name;
+  const billDate = parsedBill?.consumer?.billDate;
+  const dueDate = parsedBill?.consumer?.dueDate;
+  const unitsRaw = parsedBill?.usage?.currUnits;
+  const amountRaw = parsedBill?.usage?.currAmount;
 
   const envelope = {
     consumerName: wrap("consumerName", consumerName),
-    provider:     wrap("provider",     provider),
-    billDate:     wrap("billDate",     billDate),
-    dueDate:      wrap("dueDate",      dueDate),
-    units:        wrap("units",        unitsRaw),
-    amount:       wrap("amount",       amountRaw),
+    provider: wrap("provider", provider),
+    billDate: wrap("billDate", billDate),
+    dueDate: wrap("dueDate", dueDate),
+    units: wrap("units", unitsRaw),
+    amount: wrap("amount", amountRaw),
   };
 
   // Flat map of fieldName → source string (for DB storage)
@@ -199,43 +203,157 @@ Analyze this electricity bill document with extreme precision and extract all da
 }
 
 Extraction Guidelines:
-1. Extract all available historical months from the consumption table, payment table, or usage chart on the bill (up to 12 previous months).
-2. Slabs: Extract all tiered energy rates listed on the bill. If only a single rate is listed, provide a slab for it.
-3. If specific summary charges (fixed, wheeling, fac, duty) are split on the bill, extract each accurately; if combined, populate available amounts.
-4. Clean all strings, format currency with ₹ where appropriate, and ensure valid JSON output with no markdown fences.`;
+1. Historical data often comes from TWO SEPARATE sources on the same bill — a payment-history table (receipt date + amount paid, no units) and a monthly-consumption bar/line chart (month + units consumed, no amount). Read BOTH if present, anywhere on any page, and merge them into one "history" entry per month by matching month/date. If only units or only amount is available for a given month, still include that month with the missing field as "—" — never skip a month just because one of the two values is missing from that particular source.
+2. "usage.prevUnits" and "usage.prevAmount" must be the figures for the single billing month immediately before the current one (e.g. if this bill is for August 2026, use July 2026) — pulled from the consumption chart or payment history. Do NOT use a same-month year-over-year comparison box (e.g. "August 2025 vs August 2026") for these two fields even if one is present elsewhere on the bill; that is a different comparison, not the previous month.
+3. Bills may be in regional Indian languages (Marathi, Hindi, Gujarati, Tamil, Telugu, etc.). Recognize localized labels regardless of language/script — e.g. चालु रिडिंग/चालू रीडिंग = current meter reading, मागील रिडिंग = previous meter reading, युनिट/वापर = units consumed, देयक/रक्कम = bill amount, थकबाकी = arrears, पावती = receipt — and map them to the correct schema field.
+4. Read every table, chart axis label, and small-print box on every page carefully, including dense multi-column layouts and duplicate tear-off stub copies at the bottom of the bill — do not skip a field merely because its text is small. If duplicate summary boxes show slightly different totals (due to rounding or interest), use the primary/topmost box's values for the "summary" and "usage" fields.
+5. Extract up to 12 previous months into "history", most recent first.
+6. Slabs: Extract all tiered energy rates listed on the bill. If only a single rate is listed, provide a slab for it.
+7. If specific summary charges (fixed, wheeling, fac, duty) are split on the bill, extract each accurately; if combined, populate available amounts.
+8. Clean all strings, format currency with ₹ where appropriate, and ensure valid JSON output with no markdown fences.`;
 
-  // Candidate models in order of priority (using stable high-availability flash models first)
-  const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"];
+  // Candidate models priority:
+  // 1. Configured model from environment variable GEMINI_MODEL (e.g. GEMINI_MODEL=gemini-3.8-flash, gemini-3.7-flash, or gemini-3.6-flash)
+  // 2. Default priority sequence: gemini-3.8-flash -> gemini-3.7-flash -> gemini-3.6-flash -> gemini-3.5-flash (safety net fallback)
+  const envModel = process.env.GEMINI_MODEL?.trim();
+  const defaultModels = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash"];
+  const candidateModels = envModel
+    ? [envModel, ...defaultModels.filter((m) => m !== envModel)]
+    : defaultModels;
 
+  // Enforced output shape — the model can no longer omit fields, use the wrong type, or
+  // wander from the schema. IMPORTANT: Gemini requires UPPERCASE type strings (STRING, OBJECT,
+  // ARRAY) in responseSchema — lowercase "string"/"object"/"array" are silently ignored which
+  // is why prevUnits, prevAmount, history, other, etc. were being skipped.
+  // Adding "required" on every nested object forces Gemini to populate all fields.
+  const billResponseSchema = {
+    type: "OBJECT",
+    required: ["company", "consumer", "usage", "summary", "slabs", "history"],
+    properties: {
+      company: {
+        type: "OBJECT",
+        required: ["name", "cin", "gstin", "website", "toll", "office"],
+        properties: {
+          name: { type: "STRING" },
+          cin: { type: "STRING" },
+          gstin: { type: "STRING" },
+          website: { type: "STRING" },
+          toll: { type: "STRING" },
+          office: { type: "STRING" },
+        },
+      },
+      consumer: {
+        type: "OBJECT",
+        required: ["name", "id", "connection", "billDate", "dueDate", "tariffCategory"],
+        properties: {
+          name: { type: "STRING" },
+          id: { type: "STRING" },
+          connection: { type: "STRING" },
+          billDate: { type: "STRING" },
+          dueDate: { type: "STRING" },
+          tariffCategory: { type: "STRING" },
+        },
+      },
+      usage: {
+        type: "OBJECT",
+        required: ["currUnits", "currAmount", "prevUnits", "prevAmount", "status"],
+        properties: {
+          currUnits: { type: "STRING" },
+          currAmount: { type: "STRING" },
+          prevUnits: { type: "STRING" },
+          prevAmount: { type: "STRING" },
+          status: { type: "STRING" },
+        },
+      },
+      summary: {
+        type: "OBJECT",
+        required: ["fixed", "energy", "wheeling", "fac", "duty", "other", "total"],
+        properties: {
+          fixed: { type: "STRING" },
+          energy: { type: "STRING" },
+          wheeling: { type: "STRING" },
+          fac: { type: "STRING" },
+          duty: { type: "STRING" },
+          other: { type: "STRING" },
+          total: { type: "STRING" },
+        },
+      },
+      slabs: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          required: ["range", "rate", "desc"],
+          properties: {
+            range: { type: "STRING" },
+            rate: { type: "STRING" },
+            desc: { type: "STRING" },
+          },
+        },
+      },
+      history: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          required: ["date", "units", "amount"],
+          properties: {
+            date: { type: "STRING" },
+            units: { type: "STRING" },
+            amount: { type: "STRING" },
+          },
+        },
+      },
+    },
+  };
+
+  async function callModel(model) {
+    console.log(`🔄 Attempting OCR extraction with model: ${model}`);
+    const response = await ai.models.generateContent({
+      model,
+      contents: [
+        ...contentsParts,
+        { text: prompt },
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: billResponseSchema,
+        temperature: 0,
+        // Bills often pack small table digits and bar-chart axis labels into a dense
+        // layout (payment history tables, monthly usage charts) — the default resolution
+        // token budget is too low to reliably read those; HIGH keeps the native text layer
+        // and gives PDFs/images the full token budget for fine detail.
+        mediaResolution: "MEDIA_RESOLUTION_HIGH",
+      },
+    });
+
+    const text = response.text;
+    if (text) {
+      const parsed = JSON.parse(text.trim());
+      if (parsed && (parsed.usage || parsed.consumer || parsed.company)) {
+        return { model, parsed };
+      }
+    }
+    throw new Error("Empty or unusable response from " + model);
+  }
+
+  // Sequential execution: attempts the preferred model first. If it succeeds, returns immediately.
+  // This uses ONLY 1 API call per extraction and prevents quota exhaustion (429 RESOURCE_EXHAUSTED).
+  // If a model is rate-limited or unavailable, it gracefully cascades to the next candidate model.
   for (const model of candidateModels) {
     try {
-      console.log(`🔄 Attempting OCR extraction with model: ${model}`);
-      const response = await ai.models.generateContent({
-        model,
-        contents: [
-          ...contentsParts,
-          { text: prompt },
-        ],
-        config: {
-          responseMimeType: "application/json",
-        },
-      });
-
-      const text = response.text;
-      if (text) {
-        const parsed = JSON.parse(text.trim());
-        if (parsed && (parsed.usage || parsed.consumer || parsed.company)) {
-          console.log(`✅ Extracted bill data using model (${model}):`, parsed.company?.name, parsed.consumer?.name);
-          return parsed;
-        }
-      }
+      const winner = await callModel(model);
+      console.log(`✅ Extracted bill data using model (${winner.model}):`, winner.parsed.company?.name, winner.parsed.consumer?.name);
+      console.log(`🔍 [DEBUG] billDate: ${winner.parsed.consumer?.billDate}`);
+      console.log(`🔍 [DEBUG] prevUnits: ${winner.parsed.usage?.prevUnits} | prevAmount: ${winner.parsed.usage?.prevAmount}`);
+      console.log(`🔍 [DEBUG] history entries: ${winner.parsed.history?.length ?? 0}`, JSON.stringify(winner.parsed.history?.slice(0, 3)));
+      console.log(`🔍 [DEBUG] full response:`, JSON.stringify(winner.parsed, null, 2));
+      return winner.parsed;
     } catch (err) {
-      console.warn(`⚠️ Model ${model} failed: ${err.message}. Trying next model...`);
-      // Gracefully advance to next candidate model on transient errors
-      continue;
+      const msg = String(err?.message || err);
+      console.warn(`⚠️ Model ${model} failed (${msg.slice(0, 150)}). Trying next candidate...`);
     }
   }
 
+  console.warn(`⚠️ All candidate models failed.`);
   return null;
 }
 
@@ -538,7 +656,7 @@ router.post("/extract", auth, upload.any(), async (req, res) => {
 
     // 2. Return error if AI unavailable or parsing returned null
     if (!parsedBill) {
-      return res.status(500).json({ error: "Failed to extract bill data using AI" });
+      return res.status(500).json({ error: "Failed to extract bill data" });
     }
 
     if (!parsedBill.summary) parsedBill.summary = {};
@@ -577,7 +695,7 @@ router.post("/extract", auth, upload.any(), async (req, res) => {
     // tariff formula calculates for the given provider + units. Out-of-range values
     // require an explicit "manualOverrideConfirmed" flag from the frontend.
     const manualOverride = req.body?.manualOverrideConfirmed === true ||
-                           req.body?.manualOverrideConfirmed === "true";
+      req.body?.manualOverrideConfirmed === "true";
     const companyKey = getCompanyKey(parsedBill?.company?.name);
     const validationErrors = [];
 
@@ -613,7 +731,12 @@ router.post("/extract", auth, upload.any(), async (req, res) => {
 
     if (req.user && req.user.id) {
       try {
-        if (mongoose.Types.ObjectId.isValid(req.user.id)) {
+        // Only attempt real DB writes when actually connected — checking ObjectId *format*
+        // validity alone is not enough: with Mongo disconnected, every await below would sit
+        // in Mongoose's write buffer for bufferTimeoutMS (10s default) before failing, and
+        // there are up to 14 sequential writes here (1 delete + 1 bill + up to 12 history rows),
+        // which is what actually caused multi-minute "extracting..." hangs.
+        if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(req.user.id)) {
           // Clear previous bills for this user
           await Bill.deleteMany({ user: req.user.id });
 

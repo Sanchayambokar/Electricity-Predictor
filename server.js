@@ -41,6 +41,7 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       keys: {
         geminiApiKey: Boolean(process.env.GEMINI_API_KEY),
+        geminiModel: process.env.GEMINI_MODEL || "gemini-3.8-flash",
         mongoDb: Boolean(process.env.MONGO_URI || process.env.MONGODB_URI),
         jwtSecret: Boolean(process.env.JWT_SECRET),
         smtpConfigured: Boolean(process.env.SMTP_USER && process.env.SMTP_PASS),

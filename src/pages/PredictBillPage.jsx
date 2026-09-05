@@ -42,7 +42,7 @@ export default function PredictBillPage() {
   const [activeTab, setActiveTab] = useState("history");
   const [hasBills, setHasBills] = useState(true);
   const [tariffCategory, setTariffCategory] = useState({ value: "Residential", label: "Residential" });
-  const [visibleLags, setVisibleLags] = useState(2);
+  const [visibleLags, setVisibleLags] = useState(12);
 
   const defaultAppliances = [
     { id: "ac", name: "Air Conditioner", tonnage: "1.5", watts: 1500, hours: 6, quantity: 1, active: false },
@@ -341,23 +341,42 @@ export default function PredictBillPage() {
       const amountRaw = initialBillDetails.usage?.currAmount || "";
       const cleanedAmount = parseFloat(amountRaw.replace(/[^\d\.]/g, "")) || "";
 
-      // 4. Extract bill date month (e.g. "10-JAN-26" -> "Jan 2026")
+      // 4. Extract bill date month — handles full "12-Aug-2026", short "Aug-2026"/"Aug 2026", "08-2026", etc.
       const rawDate = initialBillDetails.consumer?.billDate || "";
       let parsedMonth = "";
-      if (rawDate && rawDate !== "—") {
+      const _mNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      if (rawDate && rawDate !== "\u2014") {
         const parts = rawDate.split(/[\/\-\s]/);
         if (parts.length >= 3) {
+          // Full date: "12-Aug-2026" or "12-08-2026"
           let monthPart = parts[1];
           if (/^\d+$/.test(monthPart)) {
-            const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
             const idx = parseInt(monthPart, 10) - 1;
-            if (idx >= 0 && idx < 12) {
-              monthPart = monthNames[idx];
-            }
+            if (idx >= 0 && idx < 12) monthPart = _mNames[idx];
           }
           monthPart = monthPart.charAt(0).toUpperCase() + monthPart.slice(1).toLowerCase();
           const yearPart = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
           parsedMonth = `${monthPart} ${yearPart}`;
+        } else if (parts.length === 2) {
+          // Short date: "Aug-2026", "Aug 2026", "08-2026"
+          let [p0, p1] = parts;
+          if (/^\d+$/.test(p0) && /^\d{4}$/.test(p1)) {
+            const idx = parseInt(p0, 10) - 1;
+            if (idx >= 0 && idx < 12) p0 = _mNames[idx];
+          } else if (/^\d{4}$/.test(p0)) {
+            [p0, p1] = [p1, p0]; // swap "2026-Aug" -> "Aug 2026"
+          }
+          p0 = p0.charAt(0).toUpperCase() + p0.slice(1).toLowerCase();
+          const yearPart = p1.length === 2 ? `20${p1}` : p1;
+          if (_mNames.includes(p0)) parsedMonth = `${p0} ${yearPart}`;
+        }
+        // Dayjs fallback for any other format
+        if (!parsedMonth) {
+          const fmts = ["DD-MMM-YYYY","MMM-YYYY","MMM YYYY","MM-YYYY","YYYY-MM-DD","D MMM YYYY"];
+          for (const fmt of fmts) {
+            const d = dayjs(rawDate, fmt, true);
+            if (d.isValid()) { parsedMonth = d.format("MMM YYYY"); break; }
+          }
         }
       }
 
@@ -445,35 +464,57 @@ export default function PredictBillPage() {
         return Math.round(subtotal + dutyVal + otherVal);
       };
 
-      if (initialBillDetails.history && parsedMonth) {
-        initialBillDetails.history.forEach(h => {
-          const parts = h.date.split(/[\/\-\s]/);
-          let hMonthStr = "";
-          if (parts.length >= 3) {
-            let mPart = parts[1];
-            if (/^\d+$/.test(mPart)) {
-              const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-              const idx = parseInt(mPart, 10) - 1;
-              if (idx >= 0 && idx < 12) {
-                mPart = monthNames[idx];
-              }
-            }
-            const mPartFormatted = mPart.charAt(0).toUpperCase() + mPart.slice(1).toLowerCase();
-            const yPart = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
-            hMonthStr = `${mPartFormatted} ${yPart}`;
-          } else if (parts.length === 2) {
-            const mPartFormatted = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
-            const yPart = parts[1].length === 2 ? `20${parts[1]}` : parts[1];
-            hMonthStr = `${mPartFormatted} ${yPart}`;
+      const _hMNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+      function parseDateToMonthStr(rawDate) {
+        if (!rawDate) return "";
+        const parts = String(rawDate).split(/[\/\-\s]/);
+        if (parts.length >= 3) {
+          // "12-Apr-2026" or "12-04-2026" or "2026-04-12"
+          // Figure out which part is year, month, day
+          let mPart = parts[1];
+          let yPart = parts[2];
+          // Handle ISO format "2026-04-12"
+          if (/^\d{4}$/.test(parts[0])) { yPart = parts[0]; mPart = parts[1]; }
+          if (/^\d+$/.test(mPart)) {
+            const idx = parseInt(mPart, 10) - 1;
+            if (idx >= 0 && idx < 12) mPart = _hMNames[idx];
           }
+          const mFormatted = mPart.charAt(0).toUpperCase() + mPart.slice(1, 3).toLowerCase();
+          const y = yPart.length === 2 ? `20${yPart}` : yPart;
+          if (_hMNames.includes(mFormatted) && /^\d{4}$/.test(y)) return `${mFormatted} ${y}`;
+        } else if (parts.length === 2) {
+          // "Apr-2026", "04-2026", "2026-Apr"
+          let [p0, p1] = parts;
+          if (/^\d{4}$/.test(p0)) [p0, p1] = [p1, p0]; // swap if year first
+          if (/^\d+$/.test(p0)) { // numeric month
+            const idx = parseInt(p0, 10) - 1;
+            if (idx >= 0 && idx < 12) p0 = _hMNames[idx];
+          }
+          const mFormatted = p0.charAt(0).toUpperCase() + p0.slice(1, 3).toLowerCase();
+          const y = p1.length === 2 ? `20${p1}` : p1;
+          if (_hMNames.includes(mFormatted) && /^\d{4}$/.test(y)) return `${mFormatted} ${y}`;
+        }
+        // dayjs fallback
+        const d = dayjs(rawDate);
+        if (d.isValid()) return d.format("MMM YYYY");
+        return "";
+      }
+
+      if (initialBillDetails.history && parsedMonth) {
+        console.log("[History] parsedMonth:", parsedMonth, "| history entries:", initialBillDetails.history.length);
+        initialBillDetails.history.forEach((h, idx) => {
+          const hMonthStr = parseDateToMonthStr(h.date);
+          console.log(`[History][${idx}] raw=${h.date} → parsed=${hMonthStr} units=${h.units} amount=${h.amount}`);
 
           if (hMonthStr) {
-            const diff = dayjs(parsedMonth, "MMM YYYY").diff(dayjs(hMonthStr, "MMM YYYY"), 'month');
+            const diff = dayjs(parsedMonth, "MMM YYYY").diff(dayjs(hMonthStr, "MMM YYYY"), "month");
             const lagIdx = diff + 1;
+            console.log(`[History][${idx}] diff=${diff} lagIdx=${lagIdx}`);
 
             if (lagIdx >= 2 && lagIdx <= 12) {
-              let hAmt = parseFloat(h.amount.replace(/[^\d\.]/g, "")) || 0;
-              let hUnitsVal = parseFloat((h.units || "").replace(/[^\d\.]/g, "")) || 0;
+              let hAmt = parseFloat(String(h.amount || "").replace(/[^\d\.]/g, "")) || 0;
+              let hUnitsVal = parseFloat(String(h.units || "").replace(/[^\d\.]/g, "")) || 0;
 
               if (hUnitsVal > 0 && hAmt === 0) {
                 hAmt = computeBillFromUnits(hUnitsVal);
