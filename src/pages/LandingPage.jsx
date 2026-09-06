@@ -37,7 +37,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="hero-desc">
-              EnergyTrack helps you monitor appliance-wise electricity consumption,
+              Energy Analyser helps you monitor appliance-wise electricity consumption,
               spot wastage, and take action — all from one simple dashboard.
             </p>
 
@@ -55,10 +55,10 @@ export default function LandingPage() {
           </div>
 
           <div className="hero-image-wrapper">
-            <img 
-              src="/hero-illustration.png" 
-              alt="Smart electricity monitoring with solar and consumption tracking" 
-              className="hero-illustration-img" 
+            <img
+              src="/hero-illustration.png"
+              alt="Smart electricity monitoring with solar and consumption tracking"
+              className="hero-illustration-img"
             />
           </div>
         </section>
@@ -118,8 +118,8 @@ export default function LandingPage() {
       {/* BOTTOM SOFT WAVES */}
       <div className="bottom-wave-container">
         <svg viewBox="0 0 1440 100" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" className="bottom-wave-svg">
-          <path d="M0,45 C280,85 520,15 820,50 C1120,85 1300,25 1440,40 L1440,100 L0,100 Z" fill="#dcfce7" fillOpacity="0.45"/>
-          <path d="M0,65 C340,30 620,85 980,45 C1220,15 1360,65 1440,55 L1440,100 L0,100 Z" fill="#bbf7d0" fillOpacity="0.35"/>
+          <path d="M0,45 C280,85 520,15 820,50 C1120,85 1300,25 1440,40 L1440,100 L0,100 Z" fill="#dcfce7" fillOpacity="0.45" />
+          <path d="M0,65 C340,30 620,85 980,45 C1220,15 1360,65 1440,55 L1440,100 L0,100 Z" fill="#bbf7d0" fillOpacity="0.35" />
         </svg>
       </div>
     </div>
