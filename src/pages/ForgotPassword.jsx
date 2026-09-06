@@ -171,19 +171,7 @@ export default function ForgotPassword() {
               Enter the 6-digit code for <strong>{email}</strong> and set your new password.
             </p>
 
-            {emailSent ? (
-              <div style={{
-                background: '#eff6ff',
-                border: '1px solid #bfdbfe',
-                borderRadius: '8px',
-                padding: '10px 14px',
-                marginBottom: '16px',
-                fontSize: '0.88rem',
-                color: '#1e40af'
-              }}>
-                ✉️ A 6-digit verification code has been sent to your email address.
-              </div>
-            ) : null}
+
 
             <form onSubmit={handleResetPassword} className="form">
               <div className="field">
