@@ -62,8 +62,8 @@ export default function ForgotPassword() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters.');
+    if (newPassword.length < 8) {
+      setError('New password must be at least 8 characters.');
       return;
     }
 
@@ -183,27 +183,7 @@ export default function ForgotPassword() {
               }}>
                 ✉️ A 6-digit verification code has been sent to your email address.
               </div>
-            ) : (
-              <div style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '12px 14px',
-                marginBottom: '16px',
-                fontSize: '0.88rem',
-                color: '#334155'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <span style={{ fontWeight: 600 }}>Your Verification Code:</span>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 'bold', fontSize: '1.1rem', letterSpacing: '3px', color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: '4px' }}>{devCode}</span>
-                </div>
-                <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                  {emailError && emailError.includes('535')
-                    ? '💡 Note: Gmail requires a 16-character Google App Password (with 2FA). You can use the code above to proceed.'
-                    : 'You can enter the verification code above to proceed.'}
-                </div>
-              </div>
-            )}
+            ) : null}
 
             <form onSubmit={handleResetPassword} className="form">
               <div className="field">
@@ -235,9 +215,10 @@ export default function ForgotPassword() {
                   <input
                     id="newPassword"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="At least 6 characters"
+                    placeholder="At least 8 characters"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
+                    minLength={8}
                     required
                     style={{ paddingRight: '36px' }}
                   />

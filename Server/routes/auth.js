@@ -85,7 +85,11 @@ async function sendResetEmail(toEmail, otp) {
     console.log(`✅ Email successfully sent to ${toEmail} (Message ID: ${info.messageId})`);
     return { sent: true, messageId: info.messageId };
   } catch (err) {
-    console.warn(`⚠️ Email delivery to ${toEmail} skipped (${err.message}). In-app OTP fallback active.`);
+    if (err.code === 'EAUTH' || (err.message && err.message.includes('535'))) {
+      console.error(`❌ SMTP Auth failed: Gmail App Password is invalid or expired. Go to myaccount.google.com > Security > App Passwords to generate a new one, then update SMTP_PASS in .env`);
+    } else {
+      console.warn(`⚠️ Email delivery to ${toEmail} failed (${err.message}).`);
+    }
     return { sent: false, error: err.message };
   }
 }
@@ -288,23 +292,17 @@ router.post("/forgot-password", async (req, res) => {
 
     const emailResult = await sendResetEmail(cleanEmail, otp);
 
-    let responseMessage = "Verification code sent to your email address.";
     if (!emailResult.sent) {
-      if (emailResult.error && emailResult.error.includes("535")) {
-        responseMessage = "Email could not be delivered (Gmail requires a 16-character App Password). Use the code below to proceed:";
-      } else if (emailResult.reason === "SMTP not configured") {
-        responseMessage = "Reset code generated (SMTP not configured). Use the code below to proceed:";
-      } else {
-        responseMessage = "Email delivery issue. Use the verification code below to proceed:";
-      }
+      console.error(`❌ Failed to send OTP email to ${cleanEmail}: ${emailResult.error}`);
+      return res.status(500).json({
+        message: "Failed to send verification code email. Please try again or contact support.",
+      });
     }
 
     return res.status(200).json({
-      message: responseMessage,
+      message: "A 6-digit verification code has been sent to your email address.",
       email: cleanEmail,
-      code: otp, // Always provide verification code so the user is never stuck
-      emailSent: emailResult.sent,
-      emailError: emailResult.error || null,
+      emailSent: true,
     });
   } catch (error) {
     console.error("Forgot password error:", error.message);
@@ -372,8 +370,8 @@ router.post("/reset-password", async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters long." });
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters long." });
     }
 
     const cleanEmail = email.toLowerCase().trim();
